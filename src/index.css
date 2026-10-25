@@ -1,0 +1,497 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg-base: #020207;
+  --color-neon-cyan: #00f3ff;
+  --color-neon-purple: #9d00ff;
+  --color-text-primary: #e2e8f0;
+
+  --avatar-skin: #ffccaa;
+  --avatar-hair: #331100;
+  --avatar-shirt: #00f3ff;
+
+  --font-display: 'Outfit', system-ui, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', Courier, monospace;
+}
+
+@layer base {
+  html,
+  body {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    background-color: var(--color-bg-base);
+    color: var(--color-text-primary);
+    font-family: var(--font-mono);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-ui {
+    font-family: var(--font-sans);
+  }
+
+  .font-mono-tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* =========================================
+   FONDOS CON PROFUNDIDAD Y PARALLAX AMBIENTAL CSS3
+   ========================================= */
+.hd2d-ambient-orbs {
+  background:
+    radial-gradient(circle at 20% 26%, rgba(0, 243, 255, 0.14) 0%, transparent 44%),
+    radial-gradient(circle at 80% 74%, rgba(157, 0, 255, 0.18) 0%, transparent 48%),
+    radial-gradient(ellipse at 50% 18%, rgba(30, 58, 138, 0.28) 0%, transparent 62%),
+    radial-gradient(circle at 50% 52%, rgba(12, 19, 46, 0.78) 0%, #020207 84%);
+  mix-blend-mode: screen;
+  animation: ambientShift 14s ease-in-out infinite alternate;
+}
+
+.arcade-hall-backdrop {
+  background:
+    radial-gradient(ellipse at 50% 16%, rgba(30, 41, 82, 0.34) 0%, transparent 58%),
+    radial-gradient(ellipse at 50% 92%, rgba(0, 243, 255, 0.08) 0%, transparent 52%),
+    linear-gradient(180deg, #030511 0%, #050816 52%, #020207 100%);
+}
+
+@keyframes ambientShift {
+  0% {
+    transform: scale(1) translate3d(-1.2%, -0.8%, 0);
+  }
+  100% {
+    transform: scale(1.06) translate3d(1.2%, 1.2%, 0);
+  }
+}
+
+.crt-scanlines-global {
+  background:
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%),
+    linear-gradient(
+      90deg,
+      rgba(255, 0, 80, 0.014),
+      rgba(0, 255, 180, 0.008),
+      rgba(0, 140, 255, 0.014)
+    );
+  background-size: 100% 4px, 3px 100%;
+  mix-blend-mode: multiply;
+}
+
+.crisp-arcade-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.cyber-grid {
+  position: absolute;
+  bottom: 0;
+  left: -50%;
+  width: 200%;
+  height: 62vh;
+  background-image:
+    linear-gradient(to right, rgba(0, 243, 255, 0.28) 1px, transparent 1px),
+    linear-gradient(to top, rgba(157, 0, 255, 0.38) 1px, transparent 1px);
+  background-size: 44px 44px;
+  transform: perspective(520px) rotateX(75deg);
+  transform-origin: top center;
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 8%, rgba(0, 0, 0, 0) 88%);
+  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 8%, rgba(0, 0, 0, 0) 88%);
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+
+/* =========================================
+   GAMEMANAGER: ESTADOS DE VISTA (display: none / flex)
+   ========================================= */
+.view-state {
+  display: none;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.view-state.active {
+  display: flex;
+}
+
+/* =========================================
+   SUPERFICIES DE CRISTAL, CONTRASTE Y ACCESIBILIDAD
+   ========================================= */
+.glass-panel {
+  background: linear-gradient(
+    155deg,
+    rgba(15, 23, 48, 0.84) 0%,
+    rgba(7, 11, 26, 0.9) 55%,
+    rgba(17, 11, 38, 0.86) 100%
+  );
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgba(0, 243, 255, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 243, 255, 0.1),
+    0 22px 56px rgba(0, 0, 0, 0.82);
+}
+
+.glass-hud {
+  background: linear-gradient(
+    180deg,
+    rgba(11, 16, 34, 0.86) 0%,
+    rgba(5, 8, 19, 0.94) 100%
+  );
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 18px 44px rgba(0, 0, 0, 0.88);
+}
+
+.title-neon {
+  font-weight: 700;
+  color: #ffffff;
+  text-wrap: balance;
+  text-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.85),
+    0 0 18px rgba(0, 243, 255, 0.65),
+    0 0 38px rgba(157, 0, 255, 0.42);
+}
+
+.btn-ui {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 243, 255, 0.18) 0%,
+    rgba(0, 243, 255, 0.06) 100%
+  );
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #cffafe;
+  border: 1px solid rgba(0, 243, 255, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 6px 18px rgba(0, 0, 0, 0.45),
+    0 0 14px rgba(0, 243, 255, 0.16);
+  cursor: pointer;
+  transition:
+    background-color 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-ui:hover {
+  background: var(--color-neon-cyan);
+  color: #02040a;
+  box-shadow:
+    0 0 24px rgba(0, 243, 255, 0.72),
+    0 8px 24px rgba(0, 0, 0, 0.6);
+  transform: translateY(-1px);
+}
+
+button:focus-visible {
+  outline: 2px solid #00f3ff;
+  outline-offset: 2px;
+}
+
+/* =========================================
+   ESTADO 3: AVATAR 2D CON DROP-SHADOW REACTIVO A LA ROPA
+   ========================================= */
+.pixel-character-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  width: 204px;
+  height: 272px;
+  filter:
+    drop-shadow(0 0 14px var(--avatar-shirt))
+    drop-shadow(6px 12px 10px rgba(0, 0, 0, 0.88));
+  transition: filter 0.22s ease;
+  animation: heroFloat 2.8s ease-in-out infinite;
+}
+
+.avatar-floor-aura {
+  width: 144px;
+  height: 18px;
+  border-radius: 9999px;
+  background: radial-gradient(ellipse at center, var(--avatar-shirt) 0%, transparent 72%);
+  opacity: 0.56;
+  filter: blur(5px);
+  transition: background 0.25s ease;
+}
+
+@keyframes heroFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+.px-cell {
+  width: 100%;
+  height: 100%;
+  transition: background-color 0.16s ease;
+}
+
+.px-empty {
+  background-color: transparent;
+}
+
+.px-hair {
+  background-color: var(--avatar-hair);
+}
+
+.px-hair-shade {
+  background-color: var(--avatar-hair);
+  filter: brightness(0.76);
+}
+
+.px-skin {
+  background-color: var(--avatar-skin);
+}
+
+.px-skin-shade {
+  background-color: var(--avatar-skin);
+  filter: brightness(0.84);
+}
+
+.px-eye {
+  background-color: #05070f;
+}
+
+.px-eye-shine {
+  background-color: #ffffff;
+}
+
+.px-shirt {
+  background-color: var(--avatar-shirt);
+}
+
+.px-shirt-shade {
+  background-color: var(--avatar-shirt);
+  filter: brightness(0.74);
+}
+
+.px-belt {
+  background-color: #facc15;
+}
+
+.px-boots {
+  background-color: #1e293b;
+}
+
+/* =========================================
+   ESTADO 4: GABINETE AMARILLO PONG (1972) — FIBRA MOLDEADA Y BISEL METÁLICO
+   ========================================= */
+.approaching-ball {
+  width: 18px;
+  height: 18px;
+  background-color: #ffffff;
+  box-shadow:
+    0 0 18px #ffffff,
+    0 0 42px #00f3ff,
+    0 0 68px rgba(255, 255, 255, 0.85);
+  animation: ballZoom 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes ballZoom {
+  0% {
+    transform: scale(0.25);
+    opacity: 0.2;
+  }
+  65% {
+    transform: scale(1.65);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(5.6);
+    opacity: 1;
+  }
+}
+
+.white-flash-active {
+  animation: flashBurst 0.75s ease-out forwards;
+}
+
+@keyframes flashBurst {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.arcade-cabinet-yellow {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(66, 32, 6, 0.42) 0%,
+      rgba(255, 255, 255, 0.22) 2.2%,
+      rgba(255, 255, 255, 0) 6%,
+      rgba(0, 0, 0, 0) 94%,
+      rgba(255, 255, 255, 0.14) 97.8%,
+      rgba(66, 32, 6, 0.48) 100%
+    ),
+    linear-gradient(
+      118deg,
+      rgba(255, 255, 255, 0.32) 0%,
+      rgba(255, 255, 255, 0.06) 24%,
+      rgba(0, 0, 0, 0) 50%,
+      rgba(0, 0, 0, 0.26) 100%
+    ),
+    radial-gradient(circle at 50% 6%, #fef08a 0%, #facc15 36%, #ca8a04 78%, #854d0e 100%);
+  border-top: 5px solid #fef9c3;
+  border-left: 7px solid #a16207;
+  border-right: 7px solid #713f12;
+  border-bottom: 12px solid #422006;
+  border-radius: 24px 24px 10px 10px;
+  box-shadow:
+    inset 0 3px 10px rgba(255, 255, 255, 0.62),
+    inset 0 -20px 38px rgba(66, 32, 6, 0.62),
+    0 34px 90px rgba(0, 0, 0, 0.95),
+    0 0 42px rgba(234, 179, 8, 0.14);
+}
+
+.arcade-screen-bezel {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.1) 0%, transparent 55%),
+    linear-gradient(155deg, #27272a 0%, #09090b 52%, #18181b 100%);
+  border-radius: 30px;
+  border: 15px solid #141417;
+  box-shadow:
+    inset 0 14px 36px rgba(0, 0, 0, 0.98),
+    inset 0 0 18px rgba(255, 255, 255, 0.08),
+    0 2px 0 rgba(254, 240, 138, 0.45),
+    0 14px 32px rgba(0, 0, 0, 0.82);
+}
+
+/* Reflejo controlado de cristal curvo sobre el tubo CRT (sin emborronar píxeles) */
+.crt-glass-reflection {
+  background:
+    linear-gradient(
+      126deg,
+      rgba(255, 255, 255, 0.11) 0%,
+      rgba(255, 255, 255, 0.03) 22%,
+      rgba(255, 255, 255, 0) 28%,
+      rgba(255, 255, 255, 0) 76%,
+      rgba(0, 243, 255, 0.045) 100%
+    ),
+    radial-gradient(circle at 50% 50%, transparent 64%, rgba(0, 0, 0, 0.48) 100%);
+  mix-blend-mode: screen;
+}
+
+/* =========================================
+   ESTADO 7: GABINETE UPRIGHT SPACE INVADERS (1978) — REFERENCIA TAITO / MIDWAY
+   Laterales crema/blanco con T-molding negro, marquesina naranja/roja retroiluminada,
+   bisel ilustrado lunar hundido y panel de control metálico cepillado.
+   ========================================= */
+.arcade-cabinet-invaders {
+  background:
+    /* Laterales upright clásicos blanco/crema con moldura T-molding negra */
+    linear-gradient(
+      90deg,
+      #141418 0%,
+      #141418 0.9%,
+      #ece7dc 1.0%,
+      #f7f4ec 3.1%,
+      #cfc8b8 4.2%,
+      #09090d 4.5%,
+      #0c0f1d 6.2%,
+      #060811 50%,
+      #0c0f1d 93.8%,
+      #09090d 95.5%,
+      #cfc8b8 95.8%,
+      #f7f4ec 96.9%,
+      #ece7dc 99.0%,
+      #141418 99.1%,
+      #141418 100%
+    );
+  border-top: 8px solid #18181c;
+  border-left: 4px solid #09090b;
+  border-right: 4px solid #09090b;
+  border-bottom: 14px solid #0f0f14;
+  border-radius: 12px 12px 6px 6px;
+  box-shadow:
+    inset 0 2px 6px rgba(255, 255, 255, 0.22),
+    inset 0 -18px 36px rgba(0, 0, 0, 0.9),
+    0 38px 96px rgba(0, 0, 0, 0.96),
+    0 0 42px rgba(234, 88, 12, 0.12);
+}
+
+.invaders-marquee {
+  background:
+    linear-gradient(122deg, rgba(255, 255, 255, 0.2) 0%, transparent 34%),
+    radial-gradient(ellipse at 50% 50%, rgba(251, 146, 60, 0.36) 0%, rgba(185, 28, 28, 0.28) 56%, transparent 86%),
+    linear-gradient(180deg, #7c2d12 0%, #450a0a 48%, #0c0612 100%);
+  border-top: 3px solid #fed7aa;
+  border-bottom: 4px solid #18181b;
+  border-left: 3px solid #ea580c;
+  border-right: 3px solid #ea580c;
+  box-shadow:
+    inset 0 0 28px rgba(249, 115, 22, 0.48),
+    0 10px 24px rgba(0, 0, 0, 0.85),
+    0 0 24px rgba(234, 88, 12, 0.26);
+}
+
+/* Bisel ilustrado cósmico/lunar 1978 alrededor de la abertura del tubo CRT */
+.invaders-moon-artwork {
+  background:
+    /* Horizonte lunar anaranjado con cráteres en la base del bisel */
+    radial-gradient(ellipse 38% 18% at 14% 96%, #ea580c 0%, #9a3412 58%, transparent 72%),
+    radial-gradient(ellipse 42% 20% at 86% 97%, #f97316 0%, #9a3412 56%, transparent 74%),
+    linear-gradient(180deg, #050816 0%, #091029 68%, #431407 90%, #7c2d12 100%);
+  border: 3px solid #1e293b;
+  box-shadow:
+    inset 0 12px 32px rgba(0, 0, 0, 0.92),
+    inset 0 -8px 20px rgba(0, 0, 0, 0.65);
+}
+
+.invaders-crt-bezel {
+  background: radial-gradient(circle at 50% 45%, #06110a 0%, #010302 88%);
+  border-radius: 20px;
+  border: 12px solid #0b0c10;
+  box-shadow:
+    inset 0 0 42px rgba(0, 0, 0, 0.98),
+    inset 0 0 16px rgba(57, 255, 20, 0.12),
+    0 0 0 2px rgba(255, 255, 255, 0.1),
+    0 14px 32px rgba(0, 0, 0, 0.9);
+}
+
+.invaders-control-deck {
+  background:
+    linear-gradient(180deg, #27272a 0%, #18181b 38%, #09090b 100%);
+  border-top: 3px solid #71717a;
+  border-bottom: 4px solid #050507;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 18px rgba(0, 0, 0, 0.78);
+}
+
+.phosphor-green-glow {
+  text-shadow:
+    0 0 8px rgba(57, 255, 20, 0.85),
+    0 0 20px rgba(57, 255, 20, 0.42);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hd2d-ambient-orbs,
+  .pixel-character-grid {
+    animation: none !important;
+  }
+}
