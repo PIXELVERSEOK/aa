@@ -431,6 +431,16 @@ const TRAIL_ECHOES: TrailEchoNode[] = [
     message:
       'Concebido en Atari y optimizado en chips TTL por Steve Wozniak, convirtió el rebote geométrico en pura arquitectura destructible. ¡A la derecha brilla un Diamante y el ascensor de cuarzo!',
   },
+  {
+    id: 'echo-cronoscopio-anomalia',
+    year: 1979,
+    title: 'Anomalía Temporal · Eco de El Cronoscopio',
+    x: 2065,
+    y: 640,
+    accentHex: '#c084fc',
+    message:
+      'Las grietas violetas y cian de este cañón resuenan con El Cronoscopio de Las Ruinas del Primer Pulso. Cuando restaures este puente y defiendas 1978, la Máquina del Tiempo podrá abrir el salto hacia los años 80.',
+  },
 ];
 
 const TRAIL_NPCS: TrailNpcNode[] = [
@@ -1198,6 +1208,29 @@ export function GlitchTrailStage({
       ctx.closePath();
       ctx.fill();
       ctx.restore();
+
+      // Fisuras Anómalas Temporales en parallax (ecos visuales de El Cronoscopio y la década de 1980)
+      const rifts = [
+        { wx: 960, wy: 240, r: 42, hex: '#00f3ff' },
+        { wx: 2380, wy: 215, r: 52, hex: '#c084fc' },
+        { wx: 3920, wy: 230, r: 58, hex: '#f43f5e' },
+      ];
+      for (const rf of rifts) {
+        const sx = rf.wx * 0.55 - camera.x * 0.42;
+        const sy = rf.wy - camera.y * 0.15;
+        if (sx < -90 || sx > vw + 90) continue;
+        ctx.save();
+        ctx.translate(Math.round(sx), Math.round(sy));
+        ctx.globalAlpha = 0.34;
+        ctx.rotate(reducedMotion ? 0.3 : elapsed * 0.45);
+        ctx.strokeStyle = '#d8be88';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-rf.r, -rf.r, rf.r * 2, rf.r * 2);
+        ctx.rotate(reducedMotion ? -0.6 : -elapsed * 0.9);
+        ctx.strokeStyle = rf.hex;
+        ctx.strokeRect(-rf.r * 0.66, -rf.r * 0.66, rf.r * 1.32, rf.r * 1.32);
+        ctx.restore();
+      }
 
       ctx.save();
       ctx.translate(-Math.round(camera.x), -Math.round(camera.y));

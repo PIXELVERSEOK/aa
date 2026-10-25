@@ -697,12 +697,122 @@ class RetroAudioEngine {
     const gain = ctx.createGain();
     osc.type = 'square';
     osc.frequency.setValueAtTime(330 * Math.pow(1.18, stepIndex - 1), now);
-    gain.gain.setValueAtTime(0.048, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+    gain.gain.setValueAtTime(0.026, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.12);
+    osc.stop(now + 0.075);
+  }
+
+  public saveJingle(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    // Fanfarria breve portátil estilo GBC al guardar partida
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((f, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      const t = now + idx * 0.085;
+      osc.frequency.setValueAtTime(f, t);
+      gain.gain.setValueAtTime(0.065, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.36);
+    });
+  }
+
+  public achievementUnlock(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const notes = [440, 554.37, 659.25, 880, 1108.73, 1318.51];
+    notes.forEach((f, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = idx % 2 === 0 ? 'square' : 'triangle';
+      const t = now + idx * 0.075;
+      osc.frequency.setValueAtTime(f, t);
+      gain.gain.setValueAtTime(0.075, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.45);
+    });
+  }
+
+  public portalResonance(active: boolean): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    if (!active) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(146.83, now);
+      osc.frequency.exponentialRampToValueAtTime(110.0, now + 0.34);
+      gain.gain.setValueAtTime(0.065, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.38);
+      return;
+    }
+    const freqs = [293.66, 440.0, 587.33, 880.0, 1174.66];
+    freqs.forEach((f, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = idx % 2 === 0 ? 'triangle' : 'sine';
+      const t = now + idx * 0.065;
+      osc.frequency.setValueAtTime(f, t);
+      gain.gain.setValueAtTime(0.07, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.44);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.46);
+    });
+  }
+
+  public timeMachineWarp(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Turbina armónica ascendente del Cronoscopio
+    const sweep = ctx.createOscillator();
+    const sweepGain = ctx.createGain();
+    sweep.type = 'sawtooth';
+    sweep.frequency.setValueAtTime(110, now);
+    sweep.frequency.exponentialRampToValueAtTime(880, now + 1.35);
+    sweepGain.gain.setValueAtTime(0.045, now);
+    sweepGain.gain.exponentialRampToValueAtTime(0.001, now + 1.45);
+    sweep.connect(sweepGain);
+    sweepGain.connect(ctx.destination);
+    sweep.start(now);
+    sweep.stop(now + 1.5);
+
+    // Arpegio cristalino inter-décadas
+    const chord = [261.63, 329.63, 392.0, 523.25, 659.25, 783.99, 1046.5, 1318.51];
+    chord.forEach((f, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = idx % 2 === 0 ? 'triangle' : 'square';
+      const t = now + 0.12 + idx * 0.11;
+      osc.frequency.setValueAtTime(f, t);
+      gain.gain.setValueAtTime(0.065, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.52);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.55);
+    });
   }
 }
 

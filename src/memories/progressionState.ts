@@ -29,6 +29,13 @@ export type PixelAbilityId =
 
 export type QuestProgressStatus = 'inactive' | 'active' | 'completed';
 
+export interface SavedPlayerOptions {
+  skinColor: string;
+  hairColor: string;
+  shirtColor: string;
+  gbGreenMode: boolean;
+}
+
 export interface RpgExplorationState {
   inventoryItems: string[];
   equippedCosmetic: string | null;
@@ -41,6 +48,9 @@ export interface RpgExplorationState {
   lanternActive: boolean;
   lastSafeArea: 'exterior-70s' | 'island-80s';
   last80sPos: { x: number; y: number } | null;
+  achievementsUnlocked: string[];
+  lastManualSaveIso: string | null;
+  savedOptions: SavedPlayerOptions;
 }
 
 export interface GameRestorationRecord {
@@ -114,6 +124,14 @@ export function createDefaultRpgState(): RpgExplorationState {
     lanternActive: false,
     lastSafeArea: 'exterior-70s',
     last80sPos: null,
+    achievementsUnlocked: [],
+    lastManualSaveIso: null,
+    savedOptions: {
+      skinColor: '#ffccaa',
+      hairColor: '#331100',
+      shirtColor: '#00f3ff',
+      gbGreenMode: false,
+    },
   };
 }
 
@@ -234,11 +252,26 @@ function deriveCoherentRpgState(
     quests['quest-despertar-1981'] = 'completed';
   }
 
+  const achievements = new Set<string>(rpg.achievementsUnlocked || []);
+  if (pongDone) {
+    achievements.add('pong-pionero-1972');
+  }
+  if (
+    invadersDone ||
+    (games['space-invaders']?.bestScore ?? 0) >= SPACE_INVADERS_UNLOCK_SCORE
+  ) {
+    achievements.add('invaders-1000-pts');
+  }
+  if (dkDone) {
+    achievements.add('vigas-1981');
+  }
+
   return {
     ...rpg,
     inventoryItems: Array.from(items),
     unlockedIslands: Array.from(unlockedIslands),
     questStates: quests,
+    achievementsUnlocked: Array.from(achievements),
   };
 }
 
@@ -382,6 +415,35 @@ export function loadProgressState(): PixelverseProgressState {
               Number.isFinite(rawRpg.last80sPos.y)
                 ? { x: rawRpg.last80sPos.x, y: rawRpg.last80sPos.y }
                 : null,
+            achievementsUnlocked: sanitizeStringArray(rawRpg.achievementsUnlocked),
+            lastManualSaveIso:
+              typeof rawRpg.lastManualSaveIso === 'string' &&
+              rawRpg.lastManualSaveIso.length > 0
+                ? rawRpg.lastManualSaveIso
+                : null,
+            savedOptions:
+              rawRpg.savedOptions && typeof rawRpg.savedOptions === 'object'
+                ? {
+                    skinColor:
+                      typeof rawRpg.savedOptions.skinColor === 'string'
+                        ? rawRpg.savedOptions.skinColor
+                        : '#ffccaa',
+                    hairColor:
+                      typeof rawRpg.savedOptions.hairColor === 'string'
+                        ? rawRpg.savedOptions.hairColor
+                        : '#331100',
+                    shirtColor:
+                      typeof rawRpg.savedOptions.shirtColor === 'string'
+                        ? rawRpg.savedOptions.shirtColor
+                        : '#00f3ff',
+                    gbGreenMode: Boolean(rawRpg.savedOptions.gbGreenMode),
+                  }
+                : {
+                    skinColor: '#ffccaa',
+                    hairColor: '#331100',
+                    shirtColor: '#00f3ff',
+                    gbGreenMode: false,
+                  },
           }
         : createDefaultRpgState();
 
@@ -947,4 +1009,56 @@ export function togglePhosphorLanternState(
   saveProgressState(next);
   return next;
 }
+
+export function recordManualSaveCheckpoint(
+  prev: PixelverseProgressState,
+  x: number,
+  y: number
+): PixelverseProgressState {
+  const rx = Math.round(x);
+  const ry = Math.round(y);
+  const iso = new Date().toISOString();
+  const next: PixelverseProgressState = {
+    ...prev,
+    island70s: {
+      ...prev.island70s,
+      lastIslandPos: { x: rx, y: ry },
+    },
+    rpg: {
+      ...prev.rpg,
+      lastSafeArea: 'exterior-70s',
+      lastManualSaveIso: iso,
+    },
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function savePlayerOptions(
+  prev: PixelverseProgressState,
+  opts: Partial<SavedPlayerOptions>
+): PixelverseProgressState {
+  const merged: SavedPlayerOptions = {
+    ...prev.rpg.savedOptions,
+    ...opts,
+  };
+  if (
+    merged.skinColor === prev.rpg.savedOptions.skinColor &&
+    merged.hairColor === prev.rpg.savedOptions.hairColor &&
+    merged.shirtColor === prev.rpg.savedOptions.shirtColor &&
+    merged.gbGreenMode === prev.rpg.savedOptions.gbGreenMode
+  ) {
+    return prev;
+  }
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: {
+      ...prev.rpg,
+      savedOptions: merged,
+    },
+  };
+  saveProgressState(next);
+  return next;
+}
+
 

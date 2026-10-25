@@ -5,10 +5,10 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Award,
   ChevronRight,
   KeyRound,
   Layers,
-  RotateCcw,
   Sparkles,
   Unlock,
   Volume2,
@@ -36,10 +36,12 @@ import {
   recordGameVictory,
   recordIslandSwitchActivated,
   recordIslandZoneVisited,
+  recordManualSaveCheckpoint,
   recordNpcTalked,
   repairRpgMechanism,
   saveLast80sCoordinates,
   saveLastIslandCoordinates,
+  savePlayerOptions,
   saveStageCheckpoint,
   setEquippedCosmetic,
   solveRpgPuzzle,
@@ -71,7 +73,7 @@ const UNLOCKABLE_LEVELS: {
     id: 'state-cinematic',
     code: 'EST-01',
     title: 'Cinemática Inicial',
-    subtitle: 'Colapso Arcade y SUPER CUPA',
+    subtitle: '«Cuando el mundo olvidó jugar»',
   },
   {
     id: 'state-avatar',
@@ -82,8 +84,8 @@ const UNLOCKABLE_LEVELS: {
   {
     id: 'state-archipelago',
     code: 'MAP-70',
-    title: 'Archipiélago RPG · Islas 70s y 80s',
-    subtitle: '9 Zonas, Interiores, Cuevas e Isla Neón',
+    title: 'Isla del Origen · Aventura GBC (70s y 80s)',
+    subtitle: '5 Grandes Zonas, Interiores, Cuevas e Isla Neón',
   },
   {
     id: 'state-pong',
@@ -317,23 +319,32 @@ export default function App() {
   const [activeState, setActiveState] = useState<ViewStateId>('state-cinematic');
   const [cinematicRunKey, setCinematicRunKey] = useState<number>(1);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
-  const [isGbGreenMode, setIsGbGreenMode] = useState<boolean>(false);
-
-  // Estado 3: Variables CSS de identidad del Arquitecto
-  const [skinColor, setSkinColor] = useState<string>(SKIN_SWATCHES[0].hex);
-  const [hairColor, setHairColor] = useState<string>(HAIR_SWATCHES[0].hex);
-  const [shirtColor, setShirtColor] = useState<string>(SHIRT_SWATCHES[0].hex);
-
-  // Modo de entrada a Pong (con o sin intro de pelota blanca)
-  const [pongSkipIntro, setPongSkipIntro] = useState<boolean>(false);
-
   // Estado persistente de aventura e historial
   const [progressState, setProgressState] = useState<PixelverseProgressState>(() =>
     loadProgressState()
   );
+
+  const [isGbGreenMode, setIsGbGreenMode] = useState<boolean>(
+    () => Boolean(progressState.rpg.savedOptions?.gbGreenMode)
+  );
+
+  // Estado 3: Variables CSS de identidad del Arquitecto (persistidas en el guardado)
+  const [skinColor, setSkinColor] = useState<string>(
+    () => progressState.rpg.savedOptions?.skinColor || SKIN_SWATCHES[0].hex
+  );
+  const [hairColor, setHairColor] = useState<string>(
+    () => progressState.rpg.savedOptions?.hairColor || HAIR_SWATCHES[0].hex
+  );
+  const [shirtColor, setShirtColor] = useState<string>(
+    () => progressState.rpg.savedOptions?.shirtColor || SHIRT_SWATCHES[0].hex
+  );
+
+  // Modo de entrada a Pong (con o sin intro de pelota blanca)
+  const [pongSkipIntro, setPongSkipIntro] = useState<boolean>(false);
+
   const [islandArrivalMode, setIslandArrivalMode] =
     useState<IslandArrivalMode>('awakening');
-  const [confirmResetOpen, setConfirmResetOpen] = useState<boolean>(false);
+  const [achievementToast, setAchievementToast] = useState<string | null>(null);
 
   // Desbloqueo maestro de niveles mediante serial (zudoka26)
   const [serialInput, setSerialInput] = useState<string>('');
@@ -396,6 +407,18 @@ export default function App() {
   useEffect(() => {
     document.documentElement.style.setProperty('--avatar-shirt', shirtColor);
   }, [shirtColor]);
+
+  // Persistir opciones visuales y paleta del jugador en el sistema de guardado
+  useEffect(() => {
+    setProgressState((prev) =>
+      savePlayerOptions(prev, {
+        skinColor,
+        hairColor,
+        shirtColor,
+        gbGreenMode: isGbGreenMode,
+      })
+    );
+  }, [skinColor, hairColor, shirtColor, isGbGreenMode]);
 
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null): boolean => {
@@ -488,7 +511,13 @@ export default function App() {
   const hasSavedProgress =
     progressState.restoredCount > 0 ||
     progressState.island70s.visitedZones.length > 1 ||
-    progressState.island70s.collectedDiamondIds.length > 0;
+    progressState.island70s.collectedDiamondIds.length > 0 ||
+    progressState.rpg.openedChestIds.length > 0 ||
+    Boolean(progressState.rpg.lastManualSaveIso);
+
+  const hasInvaders1000Achievement =
+    progressState.rpg.achievementsUnlocked.includes('invaders-1000-pts') ||
+    Boolean(progressState.games['space-invaders']?.memoryUnlocked);
 
   const showAmbientBackdrop =
     activeState === 'state-title' || activeState === 'state-avatar';
@@ -535,8 +564,26 @@ export default function App() {
         </div>
       )}
 
-      {/* Controles globales esquina superior derecha: Selector Rápido + Audio + Filtro GB Verde */}
+      {/* Notificación de Logro Permanente Desbloqueado */}
+      {achievementToast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 gbc-hud-frame px-5 py-2.5 flex items-center gap-2.5 text-xs font-mono font-bold text-[#fde047]">
+          <Award className="w-4 h-4 text-[#86efac] shrink-0" />
+          <span>{achievementToast}</span>
+        </div>
+      )}
+
+      {/* Controles globales esquina superior derecha: Logro 1000 PTS + Selector Rápido + Audio + Filtro GB Verde */}
       <div className="fixed top-4 right-4 z-40 flex items-center gap-2">
+        {hasInvaders1000Achievement && activeState !== 'state-cinematic' && (
+          <div
+            title="Logro Especial Permanente: 1.000 PTS en Space Invaders"
+            className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-mono-tabular font-bold gbc-hud-frame text-[#fde047] whitespace-nowrap shrink-0"
+          >
+            <Award className="w-3.5 h-3.5 text-[#86efac] shrink-0" />
+            <span>★ 1000 PTS INVADERS</span>
+          </div>
+        )}
+
         {masterUnlocked && activeState !== 'state-title' && (
           <button
             type="button"
@@ -714,9 +761,11 @@ export default function App() {
             </button>
           </div>
 
-          <div className="bg-black/85 border border-[#00f3ff]/40 px-4 py-1 shadow-[0_0_15px_rgba(0,243,255,0.3)]">
+          <div className="bg-black/85 border border-[#00f3ff]/40 px-4 py-1 shadow-[0_0_15px_rgba(0,243,255,0.3)] flex items-center gap-2">
             <span className="text-[10px] font-mono-tabular tracking-[0.22em] text-[#00f3ff] font-bold uppercase">
-              REINICIO DEL UNIVERSO ARCADE
+              {hasSavedProgress
+                ? 'ISLA DEL ORIGEN · PARTIDA GUARDADA LISTA'
+                : 'REINICIO DEL UNIVERSO ARCADE'}
             </span>
           </div>
         </div>
@@ -1021,6 +1070,9 @@ export default function App() {
             onSave80sPosition={(x, y) => {
               setProgressState((prev) => saveLast80sCoordinates(prev, x, y));
             }}
+            onManualSave={(x, y) => {
+              setProgressState((prev) => recordManualSaveCheckpoint(prev, x, y));
+            }}
             onOpenChest={(chestId, rewardItemIds) => {
               setProgressState((prev) => openRpgChest(prev, chestId, rewardItemIds));
             }}
@@ -1111,9 +1163,21 @@ export default function App() {
               progressState.games['space-invaders']?.ceremonyShown
             )}
             onVictoryRecorded={(finalScore) => {
+              const firstTime1000 =
+                finalScore >= 1000 &&
+                !progressState.rpg.achievementsUnlocked.includes('invaders-1000-pts');
               setProgressState((prev) =>
                 recordGameVictory(prev, 'space-invaders', finalScore, 3)
               );
+              if (firstTime1000) {
+                retroAudio.achievementUnlock();
+                setAchievementToast(
+                  '★ LOGRO PERMANENTE: DEFENSOR DE LOS 1.000 PUNTOS (SPACE INVADERS) ★'
+                );
+                window.setTimeout(() => {
+                  setAchievementToast(null);
+                }, 5200);
+              }
               window.dispatchEvent(new CustomEvent('pixelverse-shake'));
             }}
             onCeremonyCompleted={() => {

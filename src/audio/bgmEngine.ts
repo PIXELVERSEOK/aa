@@ -286,7 +286,7 @@ class RetroArcadeBgmManager {
   }
 
   public setDuckFactor(factor: number): void {
-    const clamped = Math.max(0.05, Math.min(1, factor));
+    const clamped = Math.max(0, Math.min(1, factor));
     if (Math.abs(clamped - this.duckFactor) < 0.005) return;
     this.duckFactor = clamped;
     if (this.howl) {

@@ -2,13 +2,22 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Datos espaciales, zonas interconectadas, NPCs, Sombras del Pasado,
- * Diamantes de Memoria e hitos interactivos de:
- * «LA GRAN ISLA DE LOS 70: EL ORIGEN DEL UNIVERSO ARCADE (ARCHIPIÉLAGO CERO)»
+ * ISLA 01 — ISLA DEL ORIGEN (ESTILO GAME BOY COLOR)
+ * Mapa continuo interconectado organizado alrededor de LAS CINCO GRANDES ZONAS:
+ *   1. El Pueblo del Origen (corazón de la isla, casas, carteles, guardado e historia)
+ *   2. Las Praderas del Pixel (hierba, flores, arroyos, rutas alternas y acceso a Pong)
+ *   3. El Bosque de los Secretos (senderos bifurcados, árboles que ocultan pasos y taller)
+ *   4. La Fortaleza Volcánica (montaña, roca basáltica, lava pixel-art y Space Invaders)
+ *   5. La Costa y las Ruinas del Tiempo (playas, muelles, cuevas, túneles y secreto origen)
+ *
+ * Conserva el 100% de los IDs y coordenadas de progresión existentes para compatibilidad total.
  */
 
 export const ISLAND_WORLD_W = 3640;
 export const ISLAND_WORLD_H = 2240;
+export const GBC_TILE_SIZE = 16;
+
+export type GbcBiomeType = 'village' | 'meadow' | 'forest' | 'volcanic' | 'coast';
 
 export type IslandZoneId =
   | 'costa-despertar'
@@ -28,15 +37,27 @@ export interface WalkableRect {
   w: number;
   h: number;
   zoneId: IslandZoneId;
-  surface: 'sand' | 'grass' | 'circuit' | 'stone' | 'crystal' | 'bridge' | 'fortress' | 'pier';
+  surface:
+    | 'sand'
+    | 'grass'
+    | 'circuit'
+    | 'stone'
+    | 'crystal'
+    | 'bridge'
+    | 'fortress'
+    | 'pier'
+    | 'cobble'
+    | 'secret-grass';
   requiresCondition?: 'south-shortcut' | 'garganta-bridge';
 }
 
 export interface IslandZoneMeta {
   id: IslandZoneId;
   numberLabel: string;
+  macroRegionTitle: string;
   name: string;
   subtitle: string;
+  biome: GbcBiomeType;
   accentHex: string;
   ambientTint: string;
   mapCenter: { x: number; y: number };
@@ -105,153 +126,174 @@ export interface DistantDecadeVistaSpec {
 export const ISLAND_ZONES: Record<IslandZoneId, IslandZoneMeta> = {
   'costa-despertar': {
     id: 'costa-despertar',
-    numberLabel: 'ZONA 01',
-    name: 'La Costa del Despertar',
-    subtitle: 'Playa de espuma binaria y monolitos del Reinicio Cero',
+    numberLabel: 'SECTOR 01 · ALDEA DE LOS ORÍGENES',
+    macroRegionTitle: 'LA ALDEA DE LOS ORÍGENES',
+    name: 'La Aldea de los Orígenes',
+    subtitle: 'Asentamiento artesanal con jardines, fuente del primer píxel, mirador costero y Centro de Historia',
+    biome: 'village',
     accentHex: '#38bdf8',
-    ambientTint: 'rgba(14, 165, 233, 0.08)',
+    ambientTint: 'rgba(56, 189, 248, 0.03)',
     mapCenter: { x: 540, y: 1820 },
-  },
-  'bosque-circuitos': {
-    id: 'bosque-circuitos',
-    numberLabel: 'ZONA 02',
-    name: 'El Bosque de los Circuitos',
-    subtitle: 'Árboles de silicio luminiscente, pulsos de fósforo y senderos ocultos',
-    accentHex: '#10b981',
-    ambientTint: 'rgba(16, 185, 129, 0.08)',
-    mapCenter: { x: 980, y: 1280 },
   },
   'ruinas-primer-arcade': {
     id: 'ruinas-primer-arcade',
-    numberLabel: 'ZONA 03',
-    name: 'Las Ruinas del Primer Arcade',
-    subtitle: 'Columnas catódicas y mosaicos fundacionales de la década de 1970',
+    numberLabel: 'SECTOR 03 · RUINAS DEL PRIMER PULSO',
+    macroRegionTitle: 'LAS RUINAS DEL PRIMER PULSO',
+    name: 'Las Ruinas del Primer Pulso',
+    subtitle: 'Estructuras antiguas con glifos digitales, Archivo Pionero e Instalación de la Máquina del Tiempo',
+    biome: 'village',
     accentHex: '#f59e0b',
-    ambientTint: 'rgba(245, 158, 11, 0.07)',
+    ambientTint: 'rgba(245, 158, 11, 0.035)',
     mapCenter: { x: 1860, y: 1340 },
   },
   'santuario-pong': {
     id: 'santuario-pong',
-    numberLabel: 'ZONA 04',
-    name: 'El Santuario de Pong',
-    subtitle: 'Terraza dorada de 1972 · Hogar del gabinete amarillo original',
-    accentHex: '#facc15',
-    ambientTint: 'rgba(250, 204, 21, 0.09)',
+    numberLabel: 'SECTOR 04 · SANTUARIO DE PONG',
+    macroRegionTitle: 'TERRAZAS DEL CLARO · PONG (1972)',
+    name: 'Terrazas y Claro de Pong (1972)',
+    subtitle: 'Colinas escalonadas, arroyo cristalino, flores luminiscentes y el gabinete fundacional de 1972',
+    biome: 'meadow',
+    accentHex: '#8cd96c',
+    ambientTint: 'rgba(140, 217, 108, 0.035)',
     mapCenter: { x: 2780, y: 1680 },
+  },
+  'bosque-circuitos': {
+    id: 'bosque-circuitos',
+    numberLabel: 'SECTOR 02 · BOSQUE DE LAS SEÑALES',
+    macroRegionTitle: 'EL BOSQUE DE LAS SEÑALES PERDIDAS',
+    name: 'El Bosque de las Señales Perdidas',
+    subtitle: 'Árboles monumentales con raíces de cobre, antenas olvidadas, senderos bifurcados y Taller TTL',
+    biome: 'forest',
+    accentHex: '#34d399',
+    ambientTint: 'rgba(16, 85, 56, 0.06)',
+    mapCenter: { x: 980, y: 1280 },
   },
   'garganta-invasor': {
     id: 'garganta-invasor',
-    numberLabel: 'ZONA 05',
-    name: 'La Garganta del Invasor',
-    subtitle: 'Cañón de cascadas estelares · Umbral del Sendero del Glitch Perdido',
+    numberLabel: 'SECTOR 05 · CAÑÓN DE LAS ANOMALÍAS',
+    macroRegionTitle: 'CAÑÓN Y UMBRAL DEL SENDERO GLITCH',
+    name: 'Cañón de las Cascadas · Umbral Glitch',
+    subtitle: 'Desfiladero rocoso, gruta oculta tras el agua y el Portal Anómalo de El Sendero del Glitch Perdido',
+    biome: 'volcanic',
     accentHex: '#00f3ff',
-    ambientTint: 'rgba(0, 243, 255, 0.08)',
+    ambientTint: 'rgba(0, 243, 255, 0.04)',
     mapCenter: { x: 1880, y: 720 },
   },
   'fortaleza-oleadas': {
     id: 'fortaleza-oleadas',
-    numberLabel: 'ZONA 06',
-    name: 'La Fortaleza de las Oleadas',
-    subtitle: 'Bastión defensivo de 1978 · Gabinete Space Invaders y Plataforma Estelar',
-    accentHex: '#39ff14',
-    ambientTint: 'rgba(57, 255, 20, 0.07)',
+    numberLabel: 'SECTOR 06 · BASTIÓN DE LAS OLEADAS',
+    macroRegionTitle: 'EL BASTIÓN DE LAS OLEADAS (1978)',
+    name: 'El Bastión de las Oleadas (1978)',
+    subtitle: 'Ciudadela defensiva de basalto y fisuras ígneas · Hogar de Space Invaders y la plataforma estelar',
+    biome: 'volcanic',
+    accentHex: '#f97316',
+    ambientTint: 'rgba(249, 115, 22, 0.05)',
     mapCenter: { x: 2820, y: 680 },
-  },
-  'cavernas-codigo': {
-    id: 'cavernas-codigo',
-    numberLabel: 'ZONA 07',
-    name: 'Las Cavernas del Código',
-    subtitle: 'Gruta subterránea de cuarzo cian, ecos ocultos y cristales de memoria',
-    accentHex: '#a855f7',
-    ambientTint: 'rgba(168, 85, 247, 0.12)',
-    mapCenter: { x: 600, y: 580 },
   },
   'cumbre-arquitecto': {
     id: 'cumbre-arquitecto',
-    numberLabel: 'ZONA 08',
-    name: 'La Cumbre del Arquitecto',
-    subtitle: 'Santuario lunar y Astrolabio de las Eras sobre el horizonte cósmico',
-    accentHex: '#e0f2fe',
-    ambientTint: 'rgba(224, 242, 254, 0.09)',
+    numberLabel: 'SECTOR 08 · MIRADORES Y CUMBRE',
+    macroRegionTitle: 'LOS MIRADORES Y EL ASTROLABIO',
+    name: 'Mirador Superior y Astrolabio de las Eras',
+    subtitle: 'Atalaya elevada con vistas al archipiélago y sincronizador maestro de la década de 1970',
+    biome: 'volcanic',
+    accentHex: '#fde047',
+    ambientTint: 'rgba(253, 224, 71, 0.04)',
     mapCenter: { x: 1960, y: 290 },
+  },
+  'cavernas-codigo': {
+    id: 'cavernas-codigo',
+    numberLabel: 'SECTOR 07 · CAVERNAS DE MEMORIA',
+    macroRegionTitle: 'LAS CAVERNAS DE MEMORIA',
+    name: 'Las Cavernas de Memoria',
+    subtitle: 'Pasadizos subterráneos bifurcados, cristales resonantes, antiguas instalaciones y Portal Abisal',
+    biome: 'coast',
+    accentHex: '#c084fc',
+    ambientTint: 'rgba(107, 33, 168, 0.08)',
+    mapCenter: { x: 600, y: 580 },
   },
   'puerto-islas-perdidas': {
     id: 'puerto-islas-perdidas',
-    numberLabel: 'ZONA 09',
-    name: 'El Puerto de las Islas Perdidas',
-    subtitle: 'Muelle astral frente a las islas bloqueadas de los años 80, 90 y el futuro',
-    accentHex: '#f472b6',
-    ambientTint: 'rgba(244, 114, 182, 0.08)',
+    numberLabel: 'SECTOR 09 · COSTA DE LAS MÁQUINAS',
+    macroRegionTitle: 'LA COSTA DE LAS MÁQUINAS OLVIDADAS',
+    name: 'La Costa de las Máquinas Olvidadas',
+    subtitle: 'Playas con recreativas fosilizadas en la arena, muelles antiguos y el Altar del Origen',
+    biome: 'coast',
+    accentHex: '#38bdf8',
+    ambientTint: 'rgba(36, 123, 160, 0.05)',
     mapCenter: { x: 3280, y: 1180 },
   },
 };
 
 /**
- * Regiones caminables solapadas que conforman la geografía continua de la Gran Isla de los 70.
- * Ninguna transición deja a Pixel fuera de terreno válido.
+ * Regiones caminables solapadas alineadas a múltiplos de 16 px (cuadrícula GBC).
+ * Conserva todas las rutas existentes y añade pasadizos tras edificios, claros entre árboles
+ * y desvíos escénicos en las praderas y acantilados costeros.
  */
 export const ISLAND_WALKABLE_RECTS: WalkableRect[] = [
-  // 1. La Costa del Despertar
-  { id: 'costa-main', x: 220, y: 1620, w: 680, h: 420, zoneId: 'costa-despertar', surface: 'sand' },
-  { id: 'costa-cove', x: 200, y: 1880, w: 320, h: 210, zoneId: 'costa-despertar', surface: 'sand' },
-  { id: 'costa-to-bosque', x: 700, y: 1440, w: 280, h: 260, zoneId: 'costa-despertar', surface: 'grass' },
+  // SECTOR 01: La Aldea de los Orígenes (Llegada + Mirador Sur + Jardín oculto tras el Centro de Historia)
+  { id: 'costa-main', x: 224, y: 1616, w: 688, h: 432, zoneId: 'costa-despertar', surface: 'cobble' },
+  { id: 'mirador-aldea-este', x: 864, y: 1808, w: 192, h: 160, zoneId: 'costa-despertar', surface: 'stone' },
+  { id: 'costa-cove', x: 192, y: 1872, w: 336, h: 224, zoneId: 'costa-despertar', surface: 'sand' },
+  { id: 'pueblo-back-alley', x: 528, y: 1520, w: 208, h: 112, zoneId: 'costa-despertar', surface: 'secret-grass' },
+  { id: 'costa-to-bosque', x: 704, y: 1440, w: 288, h: 256, zoneId: 'costa-despertar', surface: 'grass' },
 
-  // 2. El Bosque de los Circuitos
-  { id: 'bosque-main', x: 560, y: 1000, w: 860, h: 520, zoneId: 'bosque-circuitos', surface: 'circuit' },
-  { id: 'bosque-glade', x: 760, y: 920, w: 480, h: 160, zoneId: 'bosque-circuitos', surface: 'grass' },
-  { id: 'bosque-to-caverna', x: 480, y: 740, w: 240, h: 320, zoneId: 'bosque-circuitos', surface: 'stone' },
-  { id: 'bosque-to-ruinas', x: 1360, y: 1180, w: 220, h: 260, zoneId: 'bosque-circuitos', surface: 'circuit' },
+  // SECTOR 02: El Bosque de las Señales Perdidas (Senderos bifurcados + Claro oculto entre árboles)
+  { id: 'bosque-main', x: 560, y: 992, w: 864, h: 528, zoneId: 'bosque-circuitos', surface: 'grass' },
+  { id: 'bosque-glade', x: 752, y: 912, w: 496, h: 160, zoneId: 'bosque-circuitos', surface: 'grass' },
+  { id: 'bosque-secret-grove', x: 544, y: 848, w: 224, h: 160, zoneId: 'bosque-circuitos', surface: 'secret-grass' },
+  { id: 'bosque-to-caverna', x: 480, y: 736, w: 240, h: 320, zoneId: 'bosque-circuitos', surface: 'stone' },
+  { id: 'bosque-to-ruinas', x: 1360, y: 1184, w: 224, h: 256, zoneId: 'bosque-circuitos', surface: 'cobble' },
 
-  // Puente opcional reconstruible entre Costa / Bosque Sur y Ruinas
+  // Atajo desbloqueable entre la Aldea/Bosque Sur y las Ruinas del Primer Pulso
   {
     id: 'puente-atajo-sur',
-    x: 860,
-    y: 1640,
+    x: 864,
+    y: 1632,
     w: 720,
-    h: 110,
+    h: 112,
     zoneId: 'ruinas-primer-arcade',
     surface: 'bridge',
     requiresCondition: 'south-shortcut',
   },
 
-  // 3. Las Ruinas del Primer Arcade
-  { id: 'ruinas-plaza', x: 1500, y: 1080, w: 760, h: 520, zoneId: 'ruinas-primer-arcade', surface: 'stone' },
-  { id: 'ruinas-south-terrace', x: 1500, y: 1540, w: 420, h: 180, zoneId: 'ruinas-primer-arcade', surface: 'stone' },
-  { id: 'ruinas-to-pong', x: 2180, y: 1380, w: 300, h: 240, zoneId: 'ruinas-primer-arcade', surface: 'stone' },
-  { id: 'ruinas-to-garganta', x: 1760, y: 840, w: 260, h: 280, zoneId: 'ruinas-primer-arcade', surface: 'stone' },
+  // SECTOR 03: Las Ruinas del Primer Pulso (Archivo Pionero + Instalación de la Máquina del Tiempo)
+  { id: 'ruinas-plaza', x: 1504, y: 1072, w: 768, h: 528, zoneId: 'ruinas-primer-arcade', surface: 'cobble' },
+  { id: 'ruinas-south-terrace', x: 1504, y: 1536, w: 432, h: 192, zoneId: 'ruinas-primer-arcade', surface: 'stone' },
+  { id: 'ruinas-to-pong', x: 2176, y: 1376, w: 304, h: 240, zoneId: 'ruinas-primer-arcade', surface: 'grass' },
+  { id: 'ruinas-to-garganta', x: 1760, y: 832, w: 256, h: 288, zoneId: 'ruinas-primer-arcade', surface: 'stone' },
 
-  // 4. El Santuario de Pong
-  { id: 'pong-sanctuary-main', x: 2400, y: 1440, w: 720, h: 480, zoneId: 'santuario-pong', surface: 'circuit' },
-  { id: 'pong-secret-balcony', x: 2980, y: 1720, w: 240, h: 240, zoneId: 'santuario-pong', surface: 'stone' },
+  // SECTOR 04: Terrazas y Claro de Pong (1972)
+  { id: 'pong-sanctuary-main', x: 2400, y: 1440, w: 720, h: 480, zoneId: 'santuario-pong', surface: 'grass' },
+  { id: 'praderas-north-meadow', x: 2464, y: 1280, w: 464, h: 192, zoneId: 'santuario-pong', surface: 'grass' },
+  { id: 'pong-secret-balcony', x: 2976, y: 1712, w: 256, h: 256, zoneId: 'santuario-pong', surface: 'sand' },
 
-  // 7. Las Cavernas del Código
-  { id: 'cavernas-main', x: 240, y: 360, w: 720, h: 440, zoneId: 'cavernas-codigo', surface: 'crystal' },
-  { id: 'cavernas-east-tunnel', x: 920, y: 580, w: 640, h: 150, zoneId: 'cavernas-codigo', surface: 'crystal' },
+  // SECTOR 07: Las Cavernas de Memoria (Galerías bifurcadas + Alcoba del Portal Abisal)
+  { id: 'cavernas-main', x: 240, y: 352, w: 720, h: 448, zoneId: 'cavernas-codigo', surface: 'crystal' },
+  { id: 'cavernas-east-tunnel', x: 912, y: 576, w: 656, h: 160, zoneId: 'cavernas-codigo', surface: 'crystal' },
+  { id: 'cavernas-north-alcove', x: 1216, y: 448, w: 288, h: 160, zoneId: 'cavernas-codigo', surface: 'crystal' },
 
-  // 5. La Garganta del Invasor (Borde Oeste + Puente Astral)
-  { id: 'garganta-west-rim', x: 1520, y: 560, w: 580, h: 340, zoneId: 'garganta-invasor', surface: 'stone' },
+  // ZONA 4: La Fortaleza Volcánica (Paso rocoso + Puente Astral + Bastión de Lava + Cumbre)
+  { id: 'garganta-west-rim', x: 1520, y: 560, w: 576, h: 336, zoneId: 'garganta-invasor', surface: 'fortress' },
   {
     id: 'puente-astral-garganta',
-    x: 2060,
-    y: 620,
-    w: 390,
-    h: 130,
+    x: 2064,
+    y: 624,
+    w: 384,
+    h: 128,
     zoneId: 'garganta-invasor',
     surface: 'bridge',
     requiresCondition: 'garganta-bridge',
   },
+  { id: 'fortaleza-courtyard', x: 2400, y: 432, w: 816, h: 528, zoneId: 'fortaleza-oleadas', surface: 'fortress' },
+  { id: 'fortaleza-star-pad', x: 2512, y: 368, w: 352, h: 160, zoneId: 'fortaleza-oleadas', surface: 'fortress' },
+  { id: 'cumbre-stairway', x: 2176, y: 272, w: 384, h: 208, zoneId: 'cumbre-arquitecto', surface: 'fortress' },
+  { id: 'cumbre-sanctuary', x: 1552, y: 160, w: 800, h: 288, zoneId: 'cumbre-arquitecto', surface: 'stone' },
 
-  // 6. La Fortaleza de las Oleadas
-  { id: 'fortaleza-courtyard', x: 2410, y: 440, w: 800, h: 520, zoneId: 'fortaleza-oleadas', surface: 'fortress' },
-  { id: 'fortaleza-star-pad', x: 2520, y: 380, w: 340, h: 160, zoneId: 'fortaleza-oleadas', surface: 'fortress' },
-
-  // 8. La Cumbre del Arquitecto
-  { id: 'cumbre-stairway', x: 2180, y: 280, w: 380, h: 200, zoneId: 'cumbre-arquitecto', surface: 'stone' },
-  { id: 'cumbre-sanctuary', x: 1560, y: 170, w: 780, h: 270, zoneId: 'cumbre-arquitecto', surface: 'stone' },
-
-  // 9. El Puerto de las Islas Perdidas
-  { id: 'fortaleza-to-puerto', x: 2960, y: 900, w: 240, h: 220, zoneId: 'puerto-islas-perdidas', surface: 'stone' },
-  { id: 'puerto-pier-main', x: 3000, y: 1060, w: 520, h: 320, zoneId: 'puerto-islas-perdidas', surface: 'pier' },
+  // ZONA 5: La Costa y las Ruinas del Tiempo (Playa oriental, ruinas costeras y muelle)
+  { id: 'fortaleza-to-puerto', x: 2960, y: 896, w: 240, h: 224, zoneId: 'puerto-islas-perdidas', surface: 'sand' },
+  { id: 'puerto-pier-main', x: 2992, y: 1056, w: 528, h: 336, zoneId: 'puerto-islas-perdidas', surface: 'pier' },
+  { id: 'costa-ruinas-tiempo', x: 2992, y: 1360, w: 400, h: 240, zoneId: 'puerto-islas-perdidas', surface: 'sand' },
 ];
 
 export const ISLAND_KEY_COORDS = {
@@ -270,88 +312,105 @@ export const ISLAND_KEY_COORDS = {
 export const ISLAND_NPCS: IslandNpcSpec[] = [
   {
     id: 'npc-bit01',
-    name: 'Bit-01 · El Faro Antiguo',
-    role: 'Centinela de la Costa del Despertar',
-    x: 610,
-    y: 1765,
+    name: 'Bit-01 · Cronista de la Aldea',
+    role: 'Guardián de La Aldea de los Orígenes',
+    x: 618,
+    y: 1768,
     zoneId: 'costa-despertar',
-    palette: { primary: '#38bdf8', secondary: '#facc15', glow: '#00f3ff' },
+    palette: { primary: '#247ba0', secondary: '#f2c94c', glow: '#5cc8ff' },
     pitch: 1.08,
     linesInitial: [
-      '¡Despertaste, Pixel! Cuando SUPER CUPA fracturó las eras, esta isla fue el primer recuerdo en resistir sobre el abismo: el Archipiélago Cero de los años 70.',
-      'Sigue las venas luminosas hacia el Bosque de los Circuitos y las Ruinas Centrales. Al sureste aguarda el Santuario de Pong (1972), el pulso que encendió toda nuestra historia.',
+      '¡Bienvenido a La Aldea de los Orígenes, Pixel! Esta isla custodia la arqueología viva de los primeros videojuegos tras la fractura causada por SUPER CUPA.',
+      'Al este de nuestra fuente verás un antiguo Portal Anómalo apagado y extraños glifos tallados en piedra. Sigue el sendero norte por El Bosque de las Señales Perdidas hasta Las Ruinas del Primer Pulso: allí aguarda una misteriosa máquina dormida.',
     ],
     linesAfterPong: [
-      '¡El pulso de 1972 vuelve a latir en toda la costa! ¿Viste cómo la barra blanca de Pong te llevó volando hasta la Garganta del norte?',
-      'Dicen que el Cartógrafo del Caos desordenó el puente hacia la Fortaleza de 1978 para poner a prueba tu destreza como Arquitecto.',
+      '¡El pulso de Pong (1972) volvió a iluminar los faroles de la aldea! Dicen que esa misma frecuencia ha despertado el primer anillo de la Máquina del Tiempo en las Ruinas.',
+      'Cruza ahora hacia el Cañón del Norte para afrontar El Sendero del Glitch Perdido.',
     ],
     linesAfterInvaders: [
-      'La isla entera vibra en armonía. Desde la Cumbre del Arquitecto y el Puerto del Este ya se distinguen las siluetas de los años 80 y 90 entre la bruma.',
+      '¡Has restaurado los grandes hitos de los años 70! Visita el Observatorio del Cronoscopio en Las Ruinas del Primer Pulso: la Máquina del Tiempo está lista para abrir el salto hacia la década de 1980.',
     ],
   },
   {
     id: 'npc-ambar',
-    name: 'Cronista Ámbar',
-    role: 'Guardiana de las Ruinas del Primer Arcade',
+    name: 'Arqueóloga Ámbar',
+    role: 'Investigadora de Las Ruinas del Primer Pulso',
     x: 1865,
     y: 1320,
     zoneId: 'ruinas-primer-arcade',
-    palette: { primary: '#f59e0b', secondary: '#fef08a', glow: '#f59e0b' },
+    palette: { primary: '#d97706', secondary: '#fef08a', glow: '#f2c94c' },
     pitch: 0.94,
     linesInitial: [
-      'Estas columnas guardan los planos previos a la edad dorada: osciloscopios analógicos, computadoras PDP-1 y las primeras placas de lógica discreta.',
-      'Consejo de explorador: si activas los dos Pedestales Rúnicos al sur del Bosque y de esta plaza, reconstruirás el Puente Costero hacia un Diamante de Memoria.',
+      'Estas columnas no son simples piedras: son Las Ruinas del Primer Pulso, construidas alrededor de los primeros circuitos que soñaron mundos digitales.',
+      'En el edificio abovedado del noreste descubrimos «El Cronoscopio», una antigua Máquina del Tiempo inactiva. Y si sintonizas los tres Símbolos del Pulso repartidos por la Aldea, el Bosque y la Terraza Costera, reactivarás el Portal Anómalo de atajo.',
     ],
     linesAfterPong: [
-      'Pong ha sido restaurado para la humanidad. Ahora el Portal de la Garganta al norte está abierto: cruza «El Sendero del Glitch Perdido» para alcanzar 1978.',
+      '¡El primer anillo del Cronoscopio ya gira con la señal de 1972! Sube al Cañón del Norte para estabilizar El Sendero del Glitch Perdido y busca también la Cámara Subterránea en Las Cavernas de Memoria.',
     ],
     linesAfterInvaders: [
-      '¡1972 y 1978 brillan unidos en un mismo territorio! Sube a la Cumbre del Arquitecto para contemplar el Astrolabio de las Eras en plenitud.',
+      '¡Increíble, Pixel! Con Pong, el Sendero Glitch y Space Invaders sincronizados, entra al Observatorio del Cronoscopio al noreste de esta plaza para activar la Máquina del Tiempo y viajar a los años 80.',
+    ],
+  },
+  {
+    id: 'npc-guardabosques-nilo',
+    name: 'Explorador Nilo',
+    role: 'Viajero de Las Praderas del Pixel (Zona 2)',
+    x: 2545,
+    y: 1515,
+    zoneId: 'santuario-pong',
+    palette: { primary: '#4ca64c', secondary: '#f2c94c', glow: '#8cd96c' },
+    pitch: 1.02,
+    linesInitial: [
+      '¡Qué brisa tan agradable corre por Las Praderas del Pixel! Al este de este arroyo verás el legendario gabinete amarillo de Pong (1972).',
+      'Si exploras la pradera norte y la playa escondida al sureste encontrarás objetos ocultos que muchos viajeros pasan por alto.',
+    ],
+    linesAfterPong: [
+      '¡Increíble partido! Al restaurar Pong desbloqueaste la Lámpara de Fósforo y la plataforma de vuelo hacia el norte.',
     ],
   },
   {
     id: 'npc-eco-caverna',
-    name: 'Eco Subterráneo',
-    role: 'Morador de las Cavernas del Código',
+    name: 'Espeleólogo Cuarzo',
+    role: 'Cartógrafo de Túneles Costeros (Zona 5)',
     x: 540,
     y: 565,
     zoneId: 'cavernas-codigo',
-    palette: { primary: '#a855f7', secondary: '#67e8f9', glow: '#c084fc' },
+    palette: { primary: '#7b2cbf', secondary: '#5cc8ff', glow: '#c084fc' },
     pitch: 1.24,
     linesInitial: [
-      'Shhh... ¿escuchas cantar al cuarzo hexadecimal? Aquí abajo se refugian los Diamantes de Memoria que no cayeron en el vórtice.',
-      'Activa el Nodo de Cuarzo al oeste de esta gruta para disipar la barrera cristalina, y usa el túnel del este si quieres asomarte directo a la Garganta del Invasor.',
+      'Estos túneles subterráneos conectan el subsuelo de la Costa Sur directamente con el norte de la isla. ¡Usa la boca del túnel al suroeste cuando quieras volver rápido al Pueblo!',
+      'Activa también el Nodo de Cuarzo al oeste para abrir la cámara de cristal y alcanzar su Diamante de Memoria.',
     ],
   },
   {
     id: 'npc-cartografo-isla',
-    name: 'Holograma del Cartógrafo del Caos',
-    role: 'Arquitecto Errante de Coordenadas',
+    name: 'Cartógrafo del Caos',
+    role: 'Guardián del Paso Volcánico (Zona 4)',
     x: 1795,
     y: 675,
     zoneId: 'garganta-invasor',
-    palette: { primary: '#9d00ff', secondary: '#00f3ff', glow: '#e879f9' },
+    palette: { primary: '#8c2d19', secondary: '#ffba08', glow: '#f26419' },
     pitch: 0.86,
     linesInitial: [
-      '¡Ajá, el pequeño Pixel en persona! No me mires así, yo no trabajo para SUPER CUPA... pero tampoco regalo puentes a cualquiera.',
-      'Desarmé el Puente Astral en tres fragmentos dentro de mi «Sendero del Glitch Perdido». ¡Entra al portal si tienes reflejos para reconstruirlo jugando!',
+      '¡Alto ahí, aventurero! Más allá de este cañón humeante se alza La Fortaleza Volcánica, custodiada por ríos de magma pixelado.',
+      'Si quieres tender el puente hacia Space Invaders, demuestra tu habilidad cruzando mi «Sendero del Glitch Perdido»... ¡y no olvides mirar detrás de la cascada!',
     ],
     linesAfterInvaders: [
-      '¡Ja! Admito que superaste mis plataformas en fase y defendiste 1978 con estilo. Cuando se abran las rutas a los años 80, te tendré acertijos aún mejores.',
+      '¡Superaste los 1.000 puntos en Space Invaders dentro de La Fortaleza Volcánica! Tu logro ha quedado grabado para siempre en la memoria de la isla.',
     ],
   },
   {
     id: 'npc-guardian-cumbre',
-    name: 'Guardián del Horizonte',
-    role: 'Vigía de la Cumbre del Arquitecto',
+    name: 'Vigía del Cráter',
+    role: 'Custodio del Mirador Volcánico (Zona 4)',
     x: 1775,
     y: 305,
     zoneId: 'cumbre-arquitecto',
-    palette: { primary: '#e0f2fe', secondary: '#38bdf8', glow: '#7dd3fc' },
+    palette: { primary: '#d97706', secondary: '#fef08a', glow: '#ffd166' },
     pitch: 0.78,
     linesInitial: [
-      'Bienvenido al punto más alto del Archipiélago Cero. Bajo esta luna pálida convergen las memorias restauradas de los años 70.',
-      'Asómate también al Puerto de las Islas Perdidas, al sureste de la Fortaleza: allí verás aguardar las islas de los años 80 y 90.',
+      'Has coronado el punto más alto sobre La Fortaleza Volcánica. Desde aquí se divisan las cinco zonas de la Isla del Origen.',
+      'Desciende por el sendero oriental de la fortaleza si deseas visitar La Costa y las Ruinas del Tiempo.',
     ],
   },
 ];
@@ -360,94 +419,94 @@ export const ISLAND_ECHOES: IslandEchoSpec[] = [
   {
     id: 'echo-1958-tennis',
     year: 1958,
-    title: 'Sombra del Pasado · Tennis for Two (1958)',
-    pioneer: 'William Higinbotham · Laboratorio Nacional de Brookhaven',
+    title: 'Crónica del Pasado · Tennis for Two (1958)',
+    pioneer: 'William Higinbotham · Laboratorio de Brookhaven',
     x: 845,
     y: 1210,
     zoneId: 'bosque-circuitos',
-    accentHex: '#34d399',
+    accentHex: '#8cd96c',
     motif: 'oscilloscope',
     loreText:
-      'Catorce años antes de Pong, un computador analógico conectado a un osciloscopio redondo proyectó una pelota con gravedad sobre una red lateral para maravillar a los visitantes científicos.',
+      'Catorce años antes de Pong, un computador analógico conectado a un osciloscopio redondo mostró una pelota rebotando con gravedad sobre una red para asombro de cientos de visitantes.',
     gameplayHint:
-      'Pista del Bosque: Al noroeste de estos árboles de circuito se oculta la entrada rocosa hacia las Cavernas del Código.',
+      'Secreto del Bosque: Observa la hilera de árboles al noroeste de este claro; un sendero entre el follaje oculta un cofre antiguo.',
   },
   {
     id: 'echo-1962-spacewar',
     year: 1962,
-    title: 'Sombra del Pasado · Spacewar! (1962)',
-    pioneer: 'Steve Russell y el club ferroviario del MIT · PDP-1',
+    title: 'Crónica del Pasado · Spacewar! (1962)',
+    pioneer: 'Steve Russell y colegas · Computador PDP-1',
     x: 1665,
     y: 1185,
     zoneId: 'ruinas-primer-arcade',
-    accentHex: '#fbbf24',
+    accentHex: '#f2c94c',
     motif: 'pdp1-star',
     loreText:
-      'Dos naves —«La Aguja» y «La Cuña»— maniobrando alrededor del pozo gravitatorio de una estrella central en el monitor circular del PDP-1 sembraron el sueño espacial de toda la década siguiente.',
+      'Dos naves espaciales maniobrando alrededor del pozo gravitatorio de una estrella central en el monitor circular del PDP-1 encendieron la imaginación espacial de toda una generación.',
     gameplayHint:
-      'Pista de las Ruinas: El Santuario de Pong brilla siguiendo la calzada dorada hacia el sureste.',
+      'Pista de la Plaza: Camina hacia el sureste para adentrarte en Las Praderas del Pixel y descubrir Pong.',
   },
   {
     id: 'echo-1971-computerspace',
     year: 1971,
-    title: 'Sombra del Pasado · Computer Space (1971)',
-    pioneer: 'Nolan Bushnell y Ted Dabney · Nutting Associates',
+    title: 'Crónica del Pasado · Computer Space (1971)',
+    pioneer: 'Nolan Bushnell y Ted Dabney',
     x: 2560,
     y: 785,
     zoneId: 'fortaleza-oleadas',
-    accentHex: '#4ade80',
+    accentHex: '#ffba08',
     motif: 'rocket-cabinet',
     loreText:
-      'El primer videojuego arcade comercial operado con monedas vestía una escultura futurista de fibra de vidrio. Su complejidad inspiró a sus creadores a buscar la elegancia directa de Pong un año más tarde.',
+      'El primer videojuego recreativo operado con monedas abrió el camino hacia las grandes emociones de los salones arcade que culminarían en fenómenos como Space Invaders.',
     gameplayHint:
-      'Pista de la Fortaleza: Al norte se alza la escalinata hacia la Cumbre del Arquitecto, y al sureste el Puerto de las Islas Perdidas.',
+      'Meta de la Fortaleza Volcánica: Alcanza 1.000 puntos en Space Invaders para registrar el Logro Maestro y abrir el muelle costero.',
   },
 ];
 
 export const ISLAND_SWITCHES: IslandSwitchSpec[] = [
   {
     id: 'sw-bosque-sur',
-    label: 'Pedestal Rúnico del Bosque',
+    label: 'Mecanismo de Piedra del Bosque',
     x: 1280,
     y: 1475,
     zoneId: 'bosque-circuitos',
-    accentHex: '#10b981',
+    accentHex: '#8cd96c',
     descriptionOnActivate:
-      '¡Frecuencia 01 acoplada! Activa el Pedestal gemelo al sur de las Ruinas para tender el Puente Costero.',
+      '¡Engranaje del Bosque activado! Activa el pedestal gemelo al sur de la Plaza para desplegar el Puente Costero.',
   },
   {
     id: 'sw-ruinas-sur',
-    label: 'Pedestal Rúnico de las Ruinas',
+    label: 'Mecanismo de Piedra de la Plaza',
     x: 1585,
     y: 1595,
     zoneId: 'ruinas-primer-arcade',
-    accentHex: '#f59e0b',
+    accentHex: '#f2c94c',
     descriptionOnActivate:
-      '¡Frecuencia 02 acoplada! Si ambos pedestales brillan, el Puente de Atajo Costero se materializa con su Diamante.',
+      '¡Engranaje de la Plaza activado! Con ambos pedestales encendidos se abre el atajo del Puente Costero.',
   },
   {
     id: 'sw-caverna-cristal',
-    label: 'Nodo de Cuarzo Hexadecimal',
+    label: 'Interruptor de Cuarzo Antiguo',
     x: 355,
     y: 505,
     zoneId: 'cavernas-codigo',
-    accentHex: '#a855f7',
+    accentHex: '#c084fc',
     descriptionOnActivate:
-      '¡Armónico subterráneo liberado! La barrera de cristal al noreste de la caverna se ha abierto.',
+      '¡Compuerta subterránea abierta! El paso hacia el cristal profundo del noreste ha quedado libre.',
   },
 ];
 
 export const ISLAND_DIAMONDS: IslandDiamondSpec[] = [
   {
     id: 'isl-dia-costa',
-    label: 'Diamante de la Espuma Binaria',
+    label: 'Diamante de la Cala del Pueblo',
     x: 285,
     y: 1995,
     zoneId: 'costa-despertar',
   },
   {
     id: 'isl-dia-puente-sur',
-    label: 'Diamante del Puente Rúnico',
+    label: 'Diamante del Puente Costero',
     x: 1210,
     y: 1692,
     zoneId: 'ruinas-primer-arcade',
@@ -455,14 +514,14 @@ export const ISLAND_DIAMONDS: IslandDiamondSpec[] = [
   },
   {
     id: 'isl-dia-pong-terraza',
-    label: 'Diamante del Balcón Solar 1972',
+    label: 'Diamante Florido de las Praderas',
     x: 3115,
     y: 1850,
     zoneId: 'santuario-pong',
   },
   {
     id: 'isl-dia-caverna',
-    label: 'Diamante del Cuarzo Profundo',
+    label: 'Diamante del Túnel Subterráneo',
     x: 825,
     y: 445,
     zoneId: 'cavernas-codigo',
@@ -470,7 +529,7 @@ export const ISLAND_DIAMONDS: IslandDiamondSpec[] = [
   },
   {
     id: 'isl-dia-cumbre',
-    label: 'Diamante Cenital del Arquitecto',
+    label: 'Diamante del Cráter Volcánico',
     x: 2235,
     y: 235,
     zoneId: 'cumbre-arquitecto',
@@ -480,48 +539,51 @@ export const ISLAND_DIAMONDS: IslandDiamondSpec[] = [
 export const DISTANT_DECADE_VISTAS: DistantDecadeVistaSpec[] = [
   {
     id: 'vista-80s',
-    decadeLabel: 'HORIZONTE · AÑOS 80',
-    title: 'Isla de los Laberintos y Vigas de Neón (1980–1989)',
+    decadeLabel: 'HORIZONTE MARÍTIMO · AÑOS 80',
+    title: 'Isla de las Vigas y Laberintos (1980–1989)',
     x: 3440,
     y: 1110,
     accentHex: '#f43f5e',
-    statusText: 'SECTOR EN NIEBLA TEMPORAL · PRÓXIMA EXPANSIÓN DEL ARCHIPIÉLAGO',
+    statusText: 'PRÓXIMA REGIÓN EN EL MAR DEL TIEMPO',
     unlockRequirement:
-      'Condición narrativa: Restaurar Pong (1972), reconstruir el Puente del Sendero del Glitch y restaurar Space Invaders (1978) para estabilizar el Faro Inter-Décadas.',
+      'Condición: Superar Pong en Las Praderas del Pixel y alcanzar el Logro de 1.000 puntos en Space Invaders dentro de La Fortaleza Volcánica.',
     lorePreview:
-      'Entre las nubes del este laten laberintos amarillos, torres de vigas rojas, castillos de ladrillo y salones de neón donde aguardan los campeones y villanos de los 80.',
+      'Al otro lado del océano aguardan los salones recreativos de principios de los 80, preparados como expansión natural del archipiélago de PIXELVERSE.',
   },
   {
     id: 'vista-90s',
-    decadeLabel: 'HORIZONTE · AÑOS 90',
-    title: 'Ciudadela Flotante de 16 y 32 Bits (1990–1999)',
+    decadeLabel: 'HORIZONTE MARÍTIMO · AÑOS 90',
+    title: 'Archipiélago Portátil y de 16 Bits (1990–1999)',
     x: 3440,
     y: 1225,
     accentHex: '#a855f7',
-    statusText: 'SECTOR SELLADO POR LA ANOMALÍA DE SUPER CUPA',
+    statusText: 'REGIÓN FUTURA EN PREPARACIÓN NARRATIVA',
     unlockRequirement:
-      'Condición narrativa: Completar primero la travesía del Archipiélago de los 80 para sincronizar los motores poligonales.',
+      'Condición: Restaurar primero los cimientos de las décadas de 1970 y 1980.',
     lorePreview:
-      'Más allá del mar estelar giran anillos dorados a velocidad supersónica, fortalezas de Mode-7 y los primeros bastiones tridimensionales.',
+      'Entre la bruma marina se distinguen cartuchos dorados, aventuras portátiles a color y las primeras ciudadelas tridimensionales.',
   },
   {
     id: 'vista-futuro',
-    decadeLabel: 'HORIZONTE · NUEVO MILENIO',
-    title: 'Constelación de Mundos Abiertos y Redes Globales',
+    decadeLabel: 'HORIZONTE MARÍTIMO · NUEVO MILENIO',
+    title: 'Faro de las Eras Modernas',
     x: 3440,
     y: 1335,
-    accentHex: '#38bdf8',
-    statusText: 'SILUETA LEJANA EN EL BORDE DEL COSMOS',
+    accentHex: '#5cc8ff',
+    statusText: 'SILUETA LEJANA EN EL HORIZONTE',
     unlockRequirement:
-      'Condición narrativa: Reunir los núcleos históricos previos antes del duelo definitivo contra SUPER CUPA.',
+      'Condición: Reunir las memorias históricas del archipiélago antes del encuentro final contra SUPER CUPA.',
     lorePreview:
-      'En el confín luminoso aguardan las eras modernas del videojuego, listas para renacer cuando los cimientos clásicos estén a salvo.',
+      'El destino último donde todas las generaciones del videojuego vuelven a latir unidas.',
   },
 ];
 
 export function isSouthShortcutUnlocked(switches: string[], allUnlocked = false): boolean {
   if (allUnlocked) return true;
-  return switches.includes('sw-bosque-sur') && switches.includes('sw-ruinas-sur');
+  return (
+    (switches.includes('sw-bosque-sur') || switches.includes('sw-costa-este')) &&
+    switches.includes('sw-ruinas-sur')
+  );
 }
 
 export function isPointWalkableOnIsland(

@@ -2,18 +2,30 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Motor modular de renderizado HD-2D con Viewport Culling para
- * «La Gran Isla de los 70: El Origen del Universo Arcade».
+ * MOTOR DE RENDERIZADO PIXEL-ART ESTILO GAME BOY COLOR (CUADRÍCULA LÓGICA 16×16 ESCALADA 2×)
+ * ISLA 01 — ISLA DEL ORIGEN:
+ *   - Zona 1: El Pueblo del Origen (casas GBC, empedrado, vallas, Terminal de Guardado, carteles)
+ *   - Zona 2: Las Praderas del Pixel (hierba verde, flores animadas, arroyo con puente, Pong)
+ *   - Zona 3: El Bosque de los Secretos (árboles GBC densos, pasadizo oculto entre copas, Taller)
+ *   - Zona 4: La Fortaleza Volcánica (roca basáltica, lava pixel-art animada, murallas, Space Invaders)
+ *   - Zona 5: La Costa y las Ruinas del Tiempo (arena, muelle, túneles en rocas, Secreto del Origen)
  */
 
 import { PixelverseProgressState } from '../memories/progressionState';
 import {
+  AnomalyPortalSpec,
   BROKEN_RELAY_MECHANISM,
+  COASTAL_SUBTERRANEAN_TUNNELS,
+  evaluateTimeMachineStatus,
+  ExteriorBuildingSpec,
   FacingDirection,
   HARBOR_80S_FERRY,
   ISLAND_70S_BUILDINGS,
+  ISLAND_ANOMALY_PORTALS,
+  ISLAND_WOODEN_SIGNS,
   RPG_CHESTS,
   RPG_EXAMINABLES,
+  VILLAGE_SAVE_TERMINAL,
   WATERFALL_SECRET_ENTRANCE,
 } from '../rpg/rpgContent';
 import {
@@ -28,6 +40,7 @@ import {
   ISLAND_WORLD_W,
   ISLAND_ZONES,
   IslandZoneId,
+  WalkableRect,
 } from './island70sData';
 
 export interface IslandStar {
@@ -69,41 +82,93 @@ export interface IslandPromptRenderSpec {
   accentHex: string;
 }
 
-interface TreeProp {
+/** Celda base de mundo 32×32 px con detalle artesanal de píxel nítido */
+const CELL = 32;
+const PX = 2;
+
+interface HandcraftedTreeSpec {
   x: number;
   y: number;
-  scale: number;
-  hue: 'emerald' | 'cyan' | 'amber';
+  variant: 'forest' | 'meadow' | 'pine';
 }
 
-const CIRCUIT_TREES: TreeProp[] = [
-  { x: 640, y: 1060, scale: 1.15, hue: 'emerald' },
-  { x: 760, y: 1120, scale: 0.95, hue: 'cyan' },
-  { x: 920, y: 1030, scale: 1.22, hue: 'emerald' },
-  { x: 1110, y: 1090, scale: 1.05, hue: 'cyan' },
-  { x: 1270, y: 1050, scale: 1.18, hue: 'emerald' },
-  { x: 630, y: 1350, scale: 1.08, hue: 'cyan' },
-  { x: 1020, y: 1390, scale: 1.12, hue: 'emerald' },
-  { x: 1185, y: 1320, scale: 0.92, hue: 'amber' },
-  { x: 810, y: 1480, scale: 1.0, hue: 'emerald' },
-  { x: 2470, y: 1510, scale: 0.96, hue: 'amber' },
-  { x: 3040, y: 1510, scale: 1.05, hue: 'amber' },
-  { x: 1640, y: 235, scale: 0.92, hue: 'cyan' },
-  { x: 2140, y: 220, scale: 0.92, hue: 'cyan' },
+const ISLAND_TREES: HandcraftedTreeSpec[] = [
+  // La Aldea de los Orígenes — arboleda variada y línea que disimula el callejón secreto norte
+  { x: 260, y: 1740, variant: 'meadow' },
+  { x: 304, y: 1968, variant: 'pine' },
+  { x: 520, y: 1612, variant: 'meadow' },
+  { x: 734, y: 1612, variant: 'meadow' },
+  { x: 516, y: 1554, variant: 'forest' },
+  { x: 742, y: 1554, variant: 'forest' },
+  { x: 856, y: 1765, variant: 'pine' },
+  { x: 1028, y: 1812, variant: 'meadow' },
+
+  // El Bosque de las Señales Perdidas — dosel frondoso con paso secreto entre x=608 y x=692
+  { x: 576, y: 1004, variant: 'forest' },
+  { x: 608, y: 1004, variant: 'pine' },
+  // Hueco secreto entre x=608 y x=692 hacia el Claro Oculto
+  { x: 692, y: 1004, variant: 'pine' },
+  { x: 728, y: 1004, variant: 'forest' },
+  { x: 556, y: 928, variant: 'forest' },
+  { x: 556, y: 868, variant: 'pine' },
+  { x: 756, y: 882, variant: 'forest' },
+  { x: 640, y: 1120, variant: 'forest' },
+  { x: 760, y: 1156, variant: 'pine' },
+  { x: 896, y: 1084, variant: 'forest' },
+  { x: 1140, y: 1068, variant: 'pine' },
+  { x: 1280, y: 1052, variant: 'forest' },
+  { x: 620, y: 1360, variant: 'pine' },
+  { x: 1036, y: 1412, variant: 'forest' },
+  { x: 1188, y: 1336, variant: 'pine' },
+  { x: 816, y: 1468, variant: 'forest' },
+
+  // Las Ruinas del Primer Pulso
+  { x: 1548, y: 1124, variant: 'pine' },
+  { x: 2248, y: 1236, variant: 'meadow' },
+  { x: 1556, y: 1540, variant: 'meadow' },
+
+  // Terrazas y Claro de Pong
+  { x: 2452, y: 1476, variant: 'meadow' },
+  { x: 2496, y: 1316, variant: 'pine' },
+  { x: 2880, y: 1320, variant: 'meadow' },
+  { x: 3052, y: 1492, variant: 'pine' },
+  { x: 2468, y: 1856, variant: 'meadow' },
+  { x: 2948, y: 1884, variant: 'pine' },
 ];
 
-const CIRCUIT_CONDUIT_SEGMENTS: [{ x: number; y: number }, { x: number; y: number }][] = [
-  [{ x: 470, y: 1830 }, { x: 840, y: 1520 }],
-  [{ x: 840, y: 1520 }, { x: 980, y: 1260 }],
-  [{ x: 980, y: 1260 }, { x: 1865, y: 1340 }],
-  [{ x: 1865, y: 1340 }, { x: 2820, y: 1680 }],
-  [{ x: 1865, y: 1340 }, { x: 1880, y: 740 }],
+/** Farolas de fósforo ámbar y antenas eólicas de señal que dan identidad retrofuturista propia */
+const PHOSPHOR_LAMPS: { x: number; y: number; color: string }[] = [
+  { x: 468, y: 1796, color: '#fbbf24' },
+  { x: 748, y: 1796, color: '#fbbf24' },
+  { x: 888, y: 1852, color: '#00f3ff' },
+  { x: 1624, y: 1268, color: '#fbbf24' },
+  { x: 2042, y: 1218, color: '#00f3ff' },
+  { x: 2668, y: 1564, color: '#fbbf24' },
+  { x: 3212, y: 1244, color: '#38bdf8' },
 ];
 
-const NORTH_CONDUIT_SEGMENTS: [{ x: number; y: number }, { x: number; y: number }][] = [
-  [{ x: 1880, y: 740 }, { x: 2910, y: 672 }],
-  [{ x: 2910, y: 672 }, { x: 2340, y: 380 }],
-  [{ x: 2340, y: 380 }, { x: 1940, y: 297 }],
+const SIGNAL_WINDMILLS: { x: number; y: number }[] = [
+  { x: 842, y: 1712 },
+  { x: 1084, y: 1168 },
+  { x: 2236, y: 1098 },
+];
+
+interface LavaPoolRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Fosos y canales magmáticos del Bastión de las Oleadas (fuera del paso caminable) */
+const VOLCANIC_LAVA_POOLS: LavaPoolRect[] = [
+  { x: 2336, y: 368, w: 64, h: 224 },
+  { x: 2432, y: 960, w: 480, h: 64 },
+  { x: 3216, y: 480, w: 96, h: 384 },
+  { x: 2880, y: 352, w: 288, h: 64 },
+  { x: 2080, y: 512, w: 288, h: 96 },
+  { x: 2080, y: 768, w: 288, h: 96 },
+  { x: 1424, y: 576, w: 80, h: 256 },
 ];
 
 export function isWorldBoxVisible(
@@ -120,9 +185,287 @@ export function isWorldBoxVisible(
   return (
     wx + ww >= camX - pad &&
     wx <= camX + vw + pad &&
-    wy + wh >= camY - pad &&
+    wy + bhPad(wh) >= camY - pad &&
     wy <= camY + vh + pad
   );
+}
+
+function bhPad(wh: number): number {
+  return wh;
+}
+
+function hashTile(tx: number, ty: number): number {
+  const n = Math.imul(tx * 374761393 + ty * 668265263, 1274126177);
+  return (n ^ (n >>> 13)) >>> 0;
+}
+
+/** Tres especies orgánicas de árboles artesanales de PIXELVERSE (sin bloques clónicos) */
+function drawHandcraftedTree(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  variant: 'forest' | 'meadow' | 'pine'
+): void {
+  const x = Math.round(cx);
+  const y = Math.round(cy);
+  const dark = '#070c14';
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Sombra elíptica escalonada en el suelo
+  ctx.fillStyle = 'rgba(6, 12, 20, 0.42)';
+  ctx.fillRect(-18, 2, 36, 8);
+  ctx.fillRect(-12, 8, 24, 3);
+
+  // Raíces y tronco nudoso con vetas de corteza
+  ctx.fillStyle = dark;
+  ctx.fillRect(-9, -8, 18, 15);
+  ctx.fillStyle = '#5c381c';
+  ctx.fillRect(-7, -8, 14, 13);
+  ctx.fillStyle = '#8b572a';
+  ctx.fillRect(-5, -8, 5, 11);
+  ctx.fillRect(-10, 2, 4, 4);
+  ctx.fillRect(6, 2, 4, 4);
+
+  if (variant === 'pine') {
+    // Pino de aguja azul-esmeralda con tres niveles cónicos escalonados
+    const pDark = '#123834';
+    const pMid = '#1f6357';
+    const pLight = '#46a088';
+    ctx.fillStyle = dark;
+    ctx.fillRect(-22, -22, 44, 16);
+    ctx.fillRect(-17, -36, 34, 16);
+    ctx.fillRect(-11, -48, 22, 14);
+    ctx.fillRect(-5, -54, 10, 8);
+
+    ctx.fillStyle = pDark;
+    ctx.fillRect(-20, -20, 40, 12);
+    ctx.fillStyle = pMid;
+    ctx.fillRect(-18, -22, 36, 8);
+    ctx.fillRect(-15, -34, 30, 12);
+    ctx.fillRect(-9, -46, 18, 12);
+    ctx.fillStyle = pLight;
+    ctx.fillRect(-12, -22, 10, 4);
+    ctx.fillRect(-10, -34, 10, 5);
+    ctx.fillRect(-5, -52, 8, 8);
+  } else {
+    // Roble antiguo del bosque o árbol dorado-esmeralda de pradera con follaje asimétrico
+    const leafDeep = variant === 'forest' ? '#143d29' : '#24582a';
+    const leafMid = variant === 'forest' ? '#246b43' : '#438a3e';
+    const leafHi = variant === 'forest' ? '#4ca86b' : '#7ec850';
+    const leafAccent = variant === 'forest' ? '#5eead4' : '#d9f99d';
+
+    ctx.fillStyle = dark;
+    ctx.fillRect(-24, -30, 48, 22);
+    ctx.fillRect(-20, -42, 40, 16);
+    ctx.fillRect(-12, -48, 24, 10);
+
+    ctx.fillStyle = leafDeep;
+    ctx.fillRect(-22, -28, 44, 18);
+    ctx.fillStyle = leafMid;
+    ctx.fillRect(-20, -38, 38, 20);
+    ctx.fillRect(-10, -46, 20, 10);
+
+    ctx.fillStyle = leafHi;
+    ctx.fillRect(-16, -40, 16, 10);
+    ctx.fillRect(2, -36, 12, 8);
+    ctx.fillRect(-8, -46, 12, 6);
+
+    // Destellos de hojas / esporas de señal en el bosque
+    ctx.fillStyle = leafAccent;
+    ctx.fillRect(-12, -38, 4, 3);
+    ctx.fillRect(6, -34, 4, 3);
+  }
+
+  ctx.restore();
+}
+
+/** Farola retrofuturista de hierro forjado y bulbo de fósforo */
+function drawPhosphorStreetlamp(
+  ctx: CanvasRenderingContext2D,
+  lx: number,
+  ly: number,
+  glowHex: string,
+  elapsed: number,
+  reducedMotion: boolean
+): void {
+  const x = Math.round(lx);
+  const y = Math.round(ly);
+  const pulse = reducedMotion ? 0.22 : 0.18 + Math.sin(elapsed * 3.1 + lx * 0.05) * 0.05;
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Halo cálido de iluminación sutil sobre el camino
+  ctx.fillStyle = glowHex;
+  ctx.globalAlpha = pulse * 0.45;
+  ctx.beginPath();
+  ctx.ellipse(0, -4, 30, 14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = pulse;
+  ctx.beginPath();
+  ctx.arc(0, -34, 18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Base y mástil de hierro oscuro con remate de latón
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-6, -4, 12, 8);
+  ctx.fillRect(-3, -36, 6, 34);
+  ctx.fillRect(-8, -42, 16, 10);
+
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(-4, -2, 8, 4);
+  ctx.fillRect(-1, -34, 2, 32);
+  ctx.fillStyle = '#d8be88';
+  ctx.fillRect(-6, -41, 12, 2);
+  ctx.fillStyle = glowHex;
+  ctx.fillRect(-5, -39, 10, 5);
+
+  ctx.restore();
+}
+
+/** Molino-antena acústica que capta frecuencias antiguas de la isla */
+function drawSignalWindmill(
+  ctx: CanvasRenderingContext2D,
+  wx: number,
+  wy: number,
+  elapsed: number,
+  reducedMotion: boolean
+): void {
+  const x = Math.round(wx);
+  const y = Math.round(wy);
+  const angle = reducedMotion ? 0.4 : elapsed * 1.35 + wx * 0.01;
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  ctx.fillStyle = 'rgba(7,11,20,0.42)';
+  ctx.fillRect(-12, 2, 24, 6);
+
+  // Torre celosía de cobre y pizarra
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-8, -48, 16, 52);
+  ctx.fillStyle = '#475569';
+  ctx.fillRect(-6, -46, 12, 48);
+  ctx.fillStyle = '#d8be88';
+  ctx.fillRect(-6, -30, 12, 3);
+  ctx.fillRect(-6, -16, 12, 3);
+
+  // Aspas/antena rotatoria en la cúspide
+  ctx.save();
+  ctx.translate(0, -46);
+  ctx.rotate(angle);
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-18, -3, 36, 6);
+  ctx.fillRect(-3, -18, 6, 36);
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(-16, -1, 32, 2);
+  ctx.fillRect(-1, -16, 2, 32);
+  ctx.fillStyle = '#00f3ff';
+  ctx.fillRect(-3, -3, 6, 6);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+/** Cartel indicador tallado en madera y latón arqueológico */
+function drawGbcWoodenSign(ctx: CanvasRenderingContext2D, sx: number, sy: number): void {
+  const x = Math.round(sx);
+  const y = Math.round(sy);
+  ctx.save();
+  ctx.translate(x, y);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(-12, 2, 24, 6);
+
+  ctx.fillStyle = '#081018';
+  ctx.fillRect(-4, -8, 8, 14);
+  ctx.fillStyle = '#784820';
+  ctx.fillRect(-2, -8, 4, 12);
+
+  ctx.fillStyle = '#081018';
+  ctx.fillRect(-15, -27, 30, 21);
+  ctx.fillStyle = '#b47b38';
+  ctx.fillRect(-13, -25, 26, 17);
+  ctx.fillStyle = '#d8be88';
+  ctx.fillRect(-13, -25, 26, 3);
+  ctx.fillStyle = '#3b210e';
+  ctx.fillRect(-9, -18, 18, 2);
+  ctx.fillRect(-9, -13, 13, 2);
+
+  ctx.restore();
+}
+
+/** Terminal / Punto de Guardado estilo Game Boy Color en el Pueblo del Origen */
+function drawGbcSaveTerminal(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  elapsed: number,
+  hasSaved: boolean
+): void {
+  const x = Math.round(sx);
+  const y = Math.round(sy);
+  const blink = Math.floor(elapsed * 3) % 2 === 0;
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(-16, 4, 32, 6);
+
+  // Pedestal GBC crema y azul con contorno negro
+  ctx.fillStyle = '#081018';
+  ctx.fillRect(-14, -32, 28, 38);
+  ctx.fillStyle = '#d8e0e8';
+  ctx.fillRect(-12, -30, 24, 34);
+  ctx.fillStyle = '#90a4b8';
+  ctx.fillRect(-12, -8, 24, 12);
+
+  // Pantalla CRT verde/cian de guardado
+  ctx.fillStyle = '#081018';
+  ctx.fillRect(-10, -26, 20, 14);
+  ctx.fillStyle = hasSaved ? '#38b868' : '#2878b0';
+  ctx.fillRect(-8, -24, 16, 10);
+  ctx.fillStyle = blink ? '#f8f8d8' : '#8ce068';
+  ctx.fillRect(-4, -21, 8, 4);
+
+  // Etiqueta SAVE
+  ctx.fillStyle = '#081018';
+  ctx.font = '700 8px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('SAVE', 0, 2);
+
+  ctx.restore();
+}
+
+/** Entrada a túnel subterráneo disimulada entre rocas costeras/cavernosas */
+function drawGbcRockTunnelEntrance(ctx: CanvasRenderingContext2D, tx: number, ty: number): void {
+  const x = Math.round(tx);
+  const y = Math.round(ty);
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Arco rocoso escalonado GBC
+  ctx.fillStyle = '#081018';
+  ctx.fillRect(-20, -28, 40, 32);
+  ctx.fillRect(-14, -34, 28, 8);
+
+  ctx.fillStyle = '#685848';
+  ctx.fillRect(-18, -26, 36, 28);
+  ctx.fillStyle = '#907860';
+  ctx.fillRect(-12, -32, 24, 8);
+
+  // Boca oscura con peldaños descendentes
+  ctx.fillStyle = '#080c14';
+  ctx.fillRect(-10, -18, 20, 20);
+  ctx.fillStyle = '#383028';
+  ctx.fillRect(-8, -6, 16, 3);
+  ctx.fillRect(-8, -1, 16, 3);
+
+  ctx.restore();
 }
 
 export function drawPixelAvatar4Dir(
@@ -145,154 +488,165 @@ export function drawPixelAvatar4Dir(
 ): void {
   const reducedMotion = Boolean(opts?.reducedMotion);
   const animT = reducedMotion ? 0 : t;
-  const freq = sprinting ? 21 : 14;
-  const bob = walking
-    ? Math.abs(Math.sin(animT * freq)) * (sprinting ? 3.6 : 2.8)
-    : Math.sin(animT * 3.8) * 1.1;
-  const stride = walking && !reducedMotion ? Math.round(Math.sin(animT * freq) * 3) : 0;
-  const armSwing = walking && !reducedMotion ? Math.round(Math.cos(animT * freq) * 2.5) : 0;
+  const stepPhase = walking ? Math.floor(animT * (sprinting ? 10 : 7)) % 4 : 0;
+  const bob = walking && (stepPhase === 1 || stepPhase === 3) ? 2 : 0;
+  const stride =
+    !walking || reducedMotion ? 0 : stepPhase === 1 ? 3 : stepPhase === 3 ? -3 : 0;
   const interactReach = (opts?.interactAnim ?? 0) > 0 ? 3 : 0;
 
   ctx.save();
   ctx.translate(Math.round(ax), Math.round(ay - bob));
 
-  // Sombra elíptica de contacto sobre el suelo
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
-  ctx.beginPath();
-  ctx.ellipse(0, 4 + bob, 11, 4, 0, 0, Math.PI * 2);
-  ctx.fill();
+  // Sombra pixelada nítida estilo GBC
+  ctx.fillStyle = 'rgba(8, 12, 20, 0.5)';
+  ctx.fillRect(-9, 3 + bob, 18, 5);
 
-  // Halo de Lámpara de Fósforo si está activa
+  // Halo discreto de Lámpara de Fósforo si está activa
   if (opts?.lanternActive) {
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    const lGlow = ctx.createRadialGradient(0, -14, 4, 0, -14, 58);
-    lGlow.addColorStop(0, 'rgba(250, 204, 21, 0.44)');
-    lGlow.addColorStop(0.55, 'rgba(245, 158, 11, 0.16)');
-    lGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = lGlow;
+    ctx.fillStyle = 'rgba(250, 204, 21, 0.22)';
     ctx.beginPath();
-    ctx.arc(0, -14, 58, 0, Math.PI * 2);
+    ctx.arc(0, -14, 46, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(254, 240, 138, 0.28)';
+    ctx.beginPath();
+    ctx.arc(0, -14, 24, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  // Aura sutil reactiva al traje
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = sprinting ? 0.32 : 0.2;
-  ctx.fillStyle = shirt;
-  ctx.beginPath();
-  ctx.arc(0, -14, 17, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  const outline = '#070b14';
 
-  // Botas / piernas animadas en 4 direcciones
-  ctx.fillStyle = '#1e293b';
+  // Botas con contorno negro GBC
+  ctx.fillStyle = outline;
   if (facingDir === 'down' || facingDir === 'up') {
-    ctx.fillRect(-7, -5 + Math.max(0, stride), 6, 6 - Math.max(0, stride) * 0.4);
-    ctx.fillRect(1, -5 + Math.max(0, -stride), 6, 6 - Math.max(0, -stride) * 0.4);
+    ctx.fillRect(-8, -6 + Math.max(0, stride), 7, 8);
+    ctx.fillRect(1, -6 + Math.max(0, -stride), 7, 8);
+    ctx.fillStyle = '#243447';
+    ctx.fillRect(-7, -5 + Math.max(0, stride), 5, 6);
+    ctx.fillRect(2, -5 + Math.max(0, -stride), 5, 6);
   } else {
-    ctx.fillRect(-5 + stride, -5, 6, 6);
-    ctx.fillRect(-1 - stride, -5, 6, 6);
+    ctx.fillRect(-6 + stride, -6, 7, 8);
+    ctx.fillRect(-1 - stride, -6, 7, 8);
+    ctx.fillStyle = '#243447';
+    ctx.fillRect(-5 + stride, -5, 5, 6);
+    ctx.fillRect(-stride, -5, 5, 6);
   }
 
-  // Torso pixel-art y cinturón dorado
+  // Torso con contorno negro nítido
+  ctx.fillStyle = outline;
+  ctx.fillRect(-9, -17, 18, 13);
   ctx.fillStyle = shirt;
   ctx.fillRect(-8, -16, 16, 11);
-  ctx.fillStyle = '#facc15';
-  ctx.fillRect(-8, -7, 16, 2);
+  ctx.fillStyle = '#f2c94c';
+  ctx.fillRect(-8, -8, 16, 2);
 
-  // Detalle dorsal de mochila cuando mira hacia arriba
   if (facingDir === 'up') {
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(-6, -15, 12, 8);
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillRect(-3, -13, 6, 3);
+    ctx.fillStyle = outline;
+    ctx.fillRect(-7, -16, 14, 9);
+    ctx.fillStyle = '#8b5a2b';
+    ctx.fillRect(-6, -15, 12, 7);
+    ctx.fillStyle = '#f2c94c';
+    ctx.fillRect(-2, -13, 4, 3);
   }
 
-  // Brazos animados según dirección
-  ctx.fillStyle = skin;
+  // Brazos en 4 direcciones
+  ctx.fillStyle = outline;
   if (facingDir === 'down') {
-    ctx.fillRect(-11, -15 + armSwing, 3, 7 + interactReach);
-    ctx.fillRect(8, -15 - armSwing, 3, 7 + interactReach);
+    ctx.fillRect(-12, -16 + stride, 4, 8 + interactReach);
+    ctx.fillRect(8, -16 - stride, 4, 8 + interactReach);
+    ctx.fillStyle = skin;
+    ctx.fillRect(-11, -15 + stride, 2, 6 + interactReach);
+    ctx.fillRect(9, -15 - stride, 2, 6 + interactReach);
   } else if (facingDir === 'up') {
-    ctx.fillRect(-11, -15 - armSwing, 3, 7);
-    ctx.fillRect(8, -15 + armSwing, 3, 7);
+    ctx.fillRect(-12, -16 - stride, 4, 8);
+    ctx.fillRect(8, -16 + stride, 4, 8);
+    ctx.fillStyle = skin;
+    ctx.fillRect(-11, -15 - stride, 2, 6);
+    ctx.fillRect(9, -15 + stride, 2, 6);
   } else if (facingDir === 'right') {
-    ctx.fillRect(-2 + armSwing + interactReach, -14, 4, 7);
+    ctx.fillRect(-2 + stride + interactReach, -15, 5, 8);
+    ctx.fillStyle = skin;
+    ctx.fillRect(-1 + stride + interactReach, -14, 3, 6);
   } else {
-    ctx.fillRect(-2 - armSwing - interactReach, -14, 4, 7);
+    ctx.fillRect(-3 - stride - interactReach, -15, 5, 8);
+    ctx.fillStyle = skin;
+    ctx.fillRect(-2 - stride - interactReach, -14, 3, 6);
   }
 
-  // Cabeza y cabello con silueta diferenciada en 4 direcciones
+  // Cabeza y cabello con contorno oscuro GBC
+  ctx.fillStyle = outline;
+  ctx.fillRect(-10, -33, 20, 17);
+
   if (facingDir === 'up') {
-    ctx.fillStyle = skin;
-    ctx.fillRect(-7, -26, 14, 10);
     ctx.fillStyle = hair;
-    ctx.fillRect(-9, -32, 18, 13);
-    ctx.fillRect(-7, -19, 14, 3);
+    ctx.fillRect(-9, -32, 18, 15);
   } else if (facingDir === 'down') {
     ctx.fillStyle = skin;
-    ctx.fillRect(-7, -26, 14, 10);
+    ctx.fillRect(-8, -27, 16, 10);
     ctx.fillStyle = hair;
     ctx.fillRect(-9, -32, 18, 7);
-    ctx.fillRect(-9, -26, 2, 4);
-    ctx.fillRect(7, -26, 2, 4);
+    ctx.fillRect(-9, -26, 2, 5);
+    ctx.fillRect(7, -26, 2, 5);
+
     if (opts?.equippedCosmetic === 'item-visor-vectorial') {
-      ctx.fillStyle = '#00f3ff';
-      ctx.fillRect(-6, -23, 12, 4);
-      ctx.fillStyle = '#e0f2fe';
-      ctx.fillRect(-5, -23, 5, 1);
-    } else {
-      ctx.fillStyle = '#05070f';
-      ctx.fillRect(-5, -23, 3, 3);
-      ctx.fillRect(2, -23, 3, 3);
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(-7, -24, 14, 5);
+      ctx.fillStyle = '#5cc8ff';
+      ctx.fillRect(-6, -23, 12, 3);
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-5, -23, 1, 1);
-      ctx.fillRect(2, -23, 1, 1);
+      ctx.fillRect(-5, -23, 4, 1);
+    } else {
+      ctx.fillStyle = outline;
+      ctx.fillRect(-5, -23, 3, 4);
+      ctx.fillRect(2, -23, 3, 4);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-5, -23, 1, 2);
+      ctx.fillRect(2, -23, 1, 2);
     }
   } else if (facingDir === 'right') {
     ctx.fillStyle = skin;
-    ctx.fillRect(-6, -26, 13, 10);
+    ctx.fillRect(-6, -27, 14, 10);
     ctx.fillStyle = hair;
-    ctx.fillRect(-8, -32, 16, 7);
-    ctx.fillRect(-8, -26, 5, 7);
+    ctx.fillRect(-9, -32, 18, 7);
+    ctx.fillRect(-9, -26, 6, 8);
     if (opts?.equippedCosmetic === 'item-visor-vectorial') {
-      ctx.fillStyle = '#00f3ff';
+      ctx.fillStyle = '#5cc8ff';
       ctx.fillRect(0, -23, 8, 4);
     } else {
-      ctx.fillStyle = '#05070f';
-      ctx.fillRect(3, -23, 3, 3);
+      ctx.fillStyle = outline;
+      ctx.fillRect(3, -23, 3, 4);
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(4, -23, 1, 1);
+      ctx.fillRect(4, -23, 1, 2);
     }
   } else {
     ctx.fillStyle = skin;
-    ctx.fillRect(-7, -26, 13, 10);
+    ctx.fillRect(-8, -27, 14, 10);
     ctx.fillStyle = hair;
-    ctx.fillRect(-8, -32, 16, 7);
-    ctx.fillRect(3, -26, 5, 7);
+    ctx.fillRect(-9, -32, 18, 7);
+    ctx.fillRect(3, -26, 6, 8);
     if (opts?.equippedCosmetic === 'item-visor-vectorial') {
-      ctx.fillStyle = '#00f3ff';
+      ctx.fillStyle = '#5cc8ff';
       ctx.fillRect(-8, -23, 8, 4);
     } else {
-      ctx.fillStyle = '#05070f';
-      ctx.fillRect(-6, -23, 3, 3);
+      ctx.fillStyle = outline;
+      ctx.fillRect(-6, -23, 3, 4);
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-6, -23, 1, 1);
+      ctx.fillRect(-6, -23, 1, 2);
     }
   }
 
-  // Cosmético Corona Estelar del Descubridor
+  // Corona Dorada del Origen
   if (opts?.equippedCosmetic === 'item-manto-arquitecto') {
+    ctx.fillStyle = outline;
+    ctx.fillRect(-7, -39, 14, 7);
     ctx.fillStyle = '#fde047';
-    ctx.fillRect(-6, -36, 12, 4);
-    ctx.fillRect(-6, -39, 2, 3);
-    ctx.fillRect(-1, -40, 2, 4);
-    ctx.fillRect(4, -39, 2, 3);
-    ctx.fillStyle = '#00f3ff';
-    ctx.fillRect(-1, -35, 2, 2);
+    ctx.fillRect(-6, -37, 12, 4);
+    ctx.fillRect(-6, -39, 2, 2);
+    ctx.fillRect(-1, -40, 2, 3);
+    ctx.fillRect(4, -39, 2, 2);
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(-1, -36, 2, 2);
   }
 
   ctx.restore();
@@ -310,109 +664,176 @@ export function drawRpgTreasureChest(
   ctx.save();
   ctx.translate(Math.round(cx), Math.round(cy));
 
+  // Sombra
   ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-  ctx.fillRect(-15, 6, 30, 6);
+  ctx.fillRect(-14, 4, 28, 5);
 
-  if (!opened) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    const pulse = reducedMotion ? 0.25 : 0.2 + 0.14 * Math.sin(elapsed * 4 + cx);
-    ctx.fillStyle = accentHex;
-    ctx.globalAlpha = pulse;
-    ctx.beginPath();
-    ctx.arc(0, -4, 22, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
+  // Contorno negro GBC
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-14, -18, 28, 22);
 
-  // Base de madera reforzada y herrajes pixelados
-  ctx.fillStyle = opened ? '#451a03' : '#78350f';
-  ctx.fillRect(-14, -12, 28, 20);
-  ctx.fillStyle = opened ? '#713f12' : '#b45309';
-  ctx.fillRect(-12, -10, 24, 16);
+  // Cuerpo de madera ocre/castaña GBC
+  ctx.fillStyle = opened ? '#4a3520' : '#9c5a25';
+  ctx.fillRect(-12, -10, 24, 12);
 
   // Tapa del cofre
-  if (opened) {
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(-11, -10, 22, 6);
-    ctx.fillStyle = '#92400e';
-    ctx.fillRect(-14, -18, 28, 6);
-  } else {
-    ctx.fillStyle = '#facc15';
-    ctx.fillRect(-14, -13, 28, 3);
-    ctx.fillRect(-14, -4, 28, 2);
+  ctx.fillStyle = opened ? '#1e1610' : '#c87830';
+  ctx.fillRect(-12, -16, 24, 6);
+
+  // Herrajes dorados GBC y cerradura
+  ctx.fillStyle = opened ? '#78716c' : '#f2c94c';
+  ctx.fillRect(-12, -11, 24, 2);
+  ctx.fillRect(-3, -13, 6, 6);
+
+  if (!opened && !reducedMotion && Math.floor(elapsed * 3) % 2 === 0) {
     ctx.fillStyle = accentHex;
-    ctx.fillRect(-3, -6, 6, 6);
+    ctx.fillRect(-1, -12, 2, 3);
   }
 
   ctx.restore();
 }
 
-export function drawPixelAvatar(
+function drawPong1972CabinetWorld(
   ctx: CanvasRenderingContext2D,
-  ax: number,
-  ay: number,
-  facing: 1 | -1,
-  walking: boolean,
-  t: number,
-  skin: string,
-  hair: string,
-  shirt: string,
-  reducedMotion = false
+  wx: number,
+  wy: number,
+  restored: boolean,
+  elapsed: number
 ): void {
-  drawPixelAvatar4Dir(
-    ctx,
-    ax,
-    ay,
-    facing >= 0 ? 'right' : 'left',
-    walking,
-    false,
-    t,
-    skin,
-    hair,
-    shirt,
-    { reducedMotion }
-  );
+  const x = Math.round(wx);
+  const y = Math.round(wy);
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Alfombra ceremonial de piedra sobre la pradera
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-44, -8, 88, 32);
+  ctx.fillStyle = '#d9b878';
+  ctx.fillRect(-40, -4, 80, 24);
+  ctx.fillStyle = '#a88850';
+  ctx.fillRect(-36, 0, 72, 16);
+
+  // Gabinete amarillo clásico Atari 1972 en pixel-art GBC
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-22, -62, 44, 64);
+  ctx.fillStyle = '#e8b828';
+  ctx.fillRect(-20, -60, 40, 60);
+  ctx.fillStyle = '#b88010';
+  ctx.fillRect(14, -60, 6, 60);
+
+  // Marquesina superior PONG
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-18, -56, 36, 10);
+  ctx.fillStyle = '#f8f0c8';
+  ctx.fillRect(-16, -54, 32, 6);
+
+  // Pantalla CRT con partido en vivo pixelado
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-16, -42, 32, 22);
+  ctx.fillStyle = restored ? '#102820' : '#141820';
+  ctx.fillRect(-14, -40, 28, 18);
+
+  const bx = Math.round(Math.sin(elapsed * 4.5) * 8);
+  const by = Math.round(Math.cos(elapsed * 3.1) * 4);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-11, -35, 2, 8);
+  ctx.fillRect(9, -35 + (by > 0 ? 2 : -2), 2, 8);
+  ctx.fillRect(bx - 1, -32 + by, 3, 3);
+
+  ctx.restore();
+}
+
+function drawSpaceInvaders1978CabinetWorld(
+  ctx: CanvasRenderingContext2D,
+  wx: number,
+  wy: number,
+  restored: boolean,
+  unlocked: boolean,
+  elapsed: number
+): void {
+  const x = Math.round(wx);
+  const y = Math.round(wy);
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Pedestal de basalto volcánico
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-46, -8, 92, 32);
+  ctx.fillStyle = '#48343c';
+  ctx.fillRect(-42, -4, 84, 24);
+  ctx.fillStyle = restored ? '#38b868' : unlocked ? '#f26419' : '#685860';
+  ctx.fillRect(-38, 14, 76, 4);
+
+  // Gabinete upright crema/naranja 1978
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-24, -66, 48, 68);
+  ctx.fillStyle = '#ebe4d4';
+  ctx.fillRect(-22, -64, 44, 64);
+  ctx.fillStyle = '#181c28';
+  ctx.fillRect(-18, -50, 36, 48);
+
+  // Marquesina naranja volcánica
+  ctx.fillStyle = '#e85818';
+  ctx.fillRect(-18, -62, 36, 10);
+  ctx.fillStyle = '#f8d858';
+  ctx.fillRect(-12, -59, 24, 4);
+
+  // Pantalla CRT con marcianitos pixelados
+  ctx.fillStyle = '#06120a';
+  ctx.fillRect(-14, -44, 28, 22);
+  const shift = Math.floor(elapsed * 2) % 2 === 0 ? -2 : 2;
+  ctx.fillStyle = unlocked ? '#58e848' : '#64748b';
+  for (let ix = -8; ix <= 6; ix += 7) {
+    ctx.fillRect(ix + shift, -40, 4, 3);
+    ctx.fillRect(ix - shift, -34, 4, 3);
+  }
+  ctx.fillStyle = '#5cc8ff';
+  ctx.fillRect(-3, -26, 6, 2);
+
+  ctx.restore();
 }
 
 function drawPongHoverboard(
   ctx: CanvasRenderingContext2D,
-  bx: number,
-  by: number,
-  angle: number,
-  riderPresent: boolean,
-  t: number,
-  skin: string,
-  hair: string,
-  shirt: string,
+  hx: number,
+  hy: number,
+  tilt: number,
+  mounted: boolean,
+  elapsed: number,
+  skinColor: string,
+  hairColor: string,
+  shirtColor: string,
   reducedMotion: boolean
 ): void {
-  const hoverY = reducedMotion ? 0 : Math.sin(t * 5.2) * 3;
+  const hover = reducedMotion ? 0 : Math.round(Math.sin(elapsed * 5) * 2);
   ctx.save();
-  ctx.translate(Math.round(bx), Math.round(by + hoverY));
-  ctx.rotate(angle);
+  ctx.translate(Math.round(hx), Math.round(hy + hover));
+  if (tilt !== 0) ctx.rotate(tilt);
 
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const glow = ctx.createRadialGradient(0, 6, 2, 0, 6, 36);
-  glow.addColorStop(0, 'rgba(0, 243, 255, 0.55)');
-  glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = glow;
-  ctx.beginPath();
-  ctx.arc(0, 6, 36, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(-22, 8, 44, 5);
 
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-24, -4, 48, 10);
   ctx.fillStyle = '#ffffff';
-  ctx.shadowColor = '#00f3ff';
-  ctx.shadowBlur = 14;
-  ctx.fillRect(-28, -5, 56, 10);
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#00f3ff';
-  ctx.fillRect(-24, 3, 48, 2);
+  ctx.fillRect(-22, -2, 44, 6);
+  ctx.fillStyle = '#5cc8ff';
+  ctx.fillRect(-16, 0, 32, 2);
 
-  if (riderPresent) {
-    drawPixelAvatar(ctx, 0, -5, 1, false, t, skin, hair, shirt, reducedMotion);
+  if (mounted) {
+    drawPixelAvatar4Dir(
+      ctx,
+      0,
+      -4,
+      tilt < 0 ? 'up' : 'down',
+      false,
+      false,
+      elapsed,
+      skinColor,
+      hairColor,
+      shirtColor,
+      { reducedMotion }
+    );
   }
   ctx.restore();
 }
@@ -423,337 +844,697 @@ function drawStarShuttle(
   sy: number,
   scale: number,
   tilt: number,
-  canopyOpen: number,
-  pilotInside: boolean,
-  thrustersOn: boolean,
-  skin: string,
-  hair: string,
-  shirt: string
+  thrustersOn: boolean
 ): void {
   ctx.save();
   ctx.translate(Math.round(sx), Math.round(sy));
-  ctx.rotate(tilt);
   ctx.scale(scale, scale);
+  if (tilt !== 0) ctx.rotate(tilt);
+
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-28, -16, 56, 26);
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(-24, -14, 48, 22);
+  ctx.fillStyle = '#2563eb';
+  ctx.fillRect(-20, -4, 40, 6);
+  ctx.fillStyle = '#5cc8ff';
+  ctx.fillRect(-8, -12, 16, 8);
 
   if (thrustersOn) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    const g = ctx.createRadialGradient(0, 10, 4, 0, 10, 56);
-    g.addColorStop(0, 'rgba(0, 243, 255, 0.65)');
-    g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(0, 10, 56, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  } else {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
-    ctx.beginPath();
-    ctx.ellipse(0, 22, 42, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillStyle = '#f89820';
+    ctx.fillRect(-18, 10, 10, 8);
+    ctx.fillRect(8, 10, 10, 8);
   }
 
-  ctx.fillStyle = '#64748b';
-  ctx.fillRect(-24, 12, 5, 9);
-  ctx.fillRect(19, 12, 5, 9);
-  ctx.fillStyle = '#94a3b8';
-  ctx.fillRect(-28, 20, 12, 3);
-  ctx.fillRect(16, 20, 12, 3);
-
-  if (canopyOpen > 0.05) {
-    ctx.fillStyle = '#cbd5e1';
-    ctx.fillRect(20, 14, Math.round(22 * canopyOpen), 4);
-  }
-
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(-44, 3, 88, 11);
-  ctx.fillStyle = '#e2e8f0';
-  ctx.fillRect(-34, -5, 68, 15);
-  ctx.fillRect(-20, -13, 40, 10);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(-30, -5, 60, 3);
-  ctx.fillStyle = '#00f3ff';
-  ctx.fillRect(-32, 3, 64, 3);
-  ctx.fillStyle = '#f59e0b';
-  ctx.fillRect(-44, 5, 8, 6);
-  ctx.fillRect(36, 5, 8, 6);
-
-  if (pilotInside) {
-    ctx.fillStyle = hair;
-    ctx.fillRect(-5, -20, 10, 3);
-    ctx.fillStyle = skin;
-    ctx.fillRect(-4, -17, 8, 5);
-    ctx.fillStyle = shirt;
-    ctx.fillRect(-5, -12, 10, 4);
-  }
-
-  const lift = Math.round(-canopyOpen * 9);
-  ctx.fillStyle = 'rgba(56, 189, 248, 0.44)';
-  ctx.fillRect(-14, -21 + lift, 28, 10);
-  ctx.strokeStyle = '#67e8f9';
-  ctx.lineWidth = 1.4;
-  ctx.strokeRect(-14, -21 + lift, 28, 10);
   ctx.restore();
 }
 
-function drawPong1972CabinetWorld(
+/** Renderiza cada celda de 32×32 con riqueza artesanal de texturas orgánicas y arqueología retro */
+function drawGbcWalkableSurfaceTile(
   ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  restored: boolean,
-  t: number
+  tx: number,
+  ty: number,
+  wx: number,
+  wy: number,
+  surface: WalkableRect['surface'],
+  zoneId: IslandZoneId,
+  animFrame4: number
 ): void {
-  ctx.save();
-  ctx.translate(Math.round(cx), Math.round(cy));
+  const h = hashTile(tx, ty);
 
-  ctx.fillStyle = '#1e293b';
-  ctx.beginPath();
-  ctx.ellipse(0, 18, 64, 24, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = restored ? '#facc15' : '#00f3ff';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.ellipse(0, 16, 54, 19, 0, 0, Math.PI * 2);
-  ctx.stroke();
+  if (surface === 'sand') {
+    const shade = (h & 3) === 0 ? '#e3c57c' : '#ebd08c';
+    ctx.fillStyle = shade;
+    ctx.fillRect(wx, wy, CELL, CELL);
+    ctx.fillStyle = '#c59f56';
+    if (h % 3 === 0) ctx.fillRect(wx + 6, wy + 10, PX * 3, PX);
+    if (h % 5 === 0) ctx.fillRect(wx + 18, wy + 22, PX * 2, PX);
+    if (h % 13 === 0) {
+      // Charco mareal costero cristalino
+      ctx.fillStyle = '#1f6f8b';
+      ctx.fillRect(wx + 8, wy + 10, 14, 10);
+      ctx.fillStyle = '#7dd3fc';
+      ctx.fillRect(wx + 10, wy + 12, 8, 4);
+    } else if (h % 11 === 0) {
+      // Juncos costeros y madera de deriva
+      ctx.fillStyle = '#5c4028';
+      ctx.fillRect(wx + 10, wy + 18, 12, 3);
+      ctx.fillStyle = '#3f7d44';
+      ctx.fillRect(wx + 22, wy + 10, 2, 10);
+      ctx.fillRect(wx + 25, wy + 12, 2, 8);
+    }
+    return;
+  }
 
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const g = ctx.createRadialGradient(0, -18, 6, 0, -18, 78);
-  g.addColorStop(0, restored ? 'rgba(250, 204, 21, 0.45)' : 'rgba(0, 243, 255, 0.35)');
-  g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(0, -18, 78, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  if (surface === 'cobble') {
+    // Losas artesanales de piedra caliza y bronce envejecido (Aldea y Ruinas del Primer Pulso)
+    const isRuins = zoneId === 'ruinas-primer-arcade';
+    ctx.fillStyle = isRuins ? '#9aa5b4' : '#d6bc88';
+    ctx.fillRect(wx, wy, CELL, CELL);
+    ctx.fillStyle = isRuins ? '#687488' : '#ad8d56';
+    ctx.fillRect(wx, wy + 15, CELL, PX);
+    ctx.fillRect(wx + 15, wy, PX, 15);
+    ctx.fillRect(wx + 27, wy + 16, PX, 16);
+    ctx.fillStyle = isRuins ? '#cbd5e1' : '#ede0bc';
+    ctx.fillRect(wx + 3, wy + 3, 9, PX);
+    ctx.fillRect(wx + 18, wy + 19, 8, PX);
+    // Musgo sutil o traza de cobre arqueológico entre losas
+    if (isRuins && h % 7 === 0) {
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(wx + 6, wy + 15, 10, PX);
+    } else if (!isRuins && h % 9 === 0) {
+      ctx.fillStyle = '#4d8b46';
+      ctx.fillRect(wx + 13, wy + 13, 4, 4);
+    }
+    return;
+  }
 
-  ctx.fillStyle = '#78350f';
-  ctx.fillRect(-24, -56, 48, 70);
-  ctx.fillStyle = '#eab308';
-  ctx.fillRect(-20, -54, 40, 66);
-  ctx.fillStyle = '#fef08a';
-  ctx.fillRect(-18, -52, 36, 9);
-  ctx.fillStyle = '#111827';
-  ctx.font = '700 7px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('PONG', 0, -45);
+  if (surface === 'grass' || surface === 'circuit' || surface === 'secret-grass') {
+    const isForest = zoneId === 'bosque-circuitos';
+    const isSecret = surface === 'secret-grass';
+    const isCircuit = surface === 'circuit';
 
-  ctx.fillStyle = '#030712';
-  ctx.fillRect(-15, -40, 30, 22);
-  ctx.fillStyle = '#ffffff';
-  const pY = Math.sin(t * 3.8) * 5;
-  ctx.fillRect(-12, -33 + pY, 2, 8);
-  ctx.fillRect(10, -33 - pY, 2, 8);
-  ctx.fillRect(Math.sin(t * 3.8) * 8 - 1, -30 + Math.cos(t * 3.8) * 4, 3, 3);
+    // Variación orgánica por parches naturales para evitar una sábana verde plana
+    const patch = (tx * 3 + ty * 5 + (h & 3)) % 5;
+    ctx.fillStyle = isSecret
+      ? '#2d6e4e'
+      : isForest
+      ? patch === 0
+        ? '#235336'
+        : '#2b633e'
+      : patch === 0
+      ? '#3f8c45'
+      : patch === 1
+      ? '#4b9b49'
+      : '#459347';
+    ctx.fillRect(wx, wy, CELL, CELL);
 
-  ctx.fillStyle = '#334155';
-  ctx.fillRect(-9, -10, 18, 16);
-  ctx.fillStyle = '#f97316';
-  ctx.fillRect(-5, -6, 3, 5);
-  ctx.fillRect(2, -6, 3, 5);
-  ctx.restore();
+    // Matas de hierba asimétricas y tréboles
+    ctx.fillStyle = isForest ? '#173c26' : '#2d6d34';
+    if ((h & 3) === 0) {
+      ctx.fillRect(wx + 5, wy + 9, PX, PX * 2);
+      ctx.fillRect(wx + 9, wy + 6, PX, PX * 3);
+      ctx.fillRect(wx + 13, wy + 10, PX, PX * 2);
+    }
+    if ((h & 7) === 2) {
+      ctx.fillRect(wx + 19, wy + 19, PX, PX * 2);
+      ctx.fillRect(wx + 23, wy + 16, PX, PX * 3);
+    }
+
+    // Trazas arqueológicas enterradas bajo el musgo del Bosque de las Señales
+    if (isCircuit && h % 6 === 0) {
+      ctx.fillStyle = '#1e4638';
+      ctx.fillRect(wx + 4, wy + 24, 24, 4);
+      ctx.fillStyle = animFrame4 % 2 === 0 ? '#2dd4bf' : '#0d9488';
+      ctx.fillRect(wx + 8, wy + 25, 12, 2);
+    }
+
+    // Setas luminiscentes en el bosque y flores silvestres asimétricas en claros
+    if (isForest && h % 11 === 0) {
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillRect(wx + 14, wy + 16, 2, 4);
+      ctx.fillStyle = h % 2 === 0 ? '#38bdf8' : '#fbbf24';
+      ctx.fillRect(wx + 12, wy + 13, 6, 3);
+    } else if (!isForest && h % 10 === 0) {
+      const shift = animFrame4 % 2 === 0 ? 0 : 1;
+      ctx.fillStyle = '#2d6d34';
+      ctx.fillRect(wx + 13, wy + 15, 2, 5);
+      ctx.fillStyle = h % 3 === 0 ? '#fbbf24' : h % 2 === 0 ? '#fb7185' : '#e0f2fe';
+      ctx.fillRect(wx + 12 + shift, wy + 12, 4, 4);
+    } else if (isSecret && h % 4 === 0) {
+      ctx.fillStyle = '#5eead4';
+      ctx.fillRect(wx + 14, wy + 14, 3, 3);
+    }
+    return;
+  }
+
+  if (surface === 'fortress') {
+    ctx.fillStyle = (h & 1) === 0 ? '#382932' : '#402f39';
+    ctx.fillRect(wx, wy, CELL, CELL);
+    ctx.fillStyle = '#21161d';
+    ctx.fillRect(wx, wy + CELL - PX, CELL, PX);
+    ctx.fillRect(wx + CELL - PX, wy, PX, CELL);
+    ctx.fillStyle = '#5a434e';
+    ctx.fillRect(wx + PX, wy + PX, 12, PX);
+    if (h % 13 === 0) {
+      ctx.fillStyle = animFrame4 % 2 === 0 ? '#f26419' : '#ffba08';
+      ctx.fillRect(wx + 10, wy + 16, 8, PX);
+    }
+    return;
+  }
+
+  if (surface === 'crystal') {
+    ctx.fillStyle = (h & 1) === 0 ? '#241f38' : '#2a2440';
+    ctx.fillRect(wx, wy, CELL, CELL);
+    ctx.fillStyle = '#151125';
+    if (h % 3 === 0) ctx.fillRect(wx + 8, wy + 8, 6, 4);
+    if (h % 9 === 0) {
+      ctx.fillStyle = h % 2 === 0 ? '#38bdf8' : '#c084fc';
+      ctx.fillRect(wx + 16, wy + 11, 4, 7);
+    }
+    return;
+  }
+
+  if (surface === 'pier') {
+    ctx.fillStyle = '#9c6834';
+    ctx.fillRect(wx, wy, CELL, CELL);
+    ctx.fillStyle = '#523216';
+    for (let py = 0; py < CELL; py += 8) {
+      ctx.fillRect(wx, wy + py, CELL, PX);
+    }
+    ctx.fillStyle = '#c48c4e';
+    ctx.fillRect(wx + 4, wy + 2, 10, PX);
+    return;
+  }
+
+  if (surface === 'bridge') {
+    ctx.fillStyle = '#b47e40';
+    ctx.fillRect(wx, wy, CELL, CELL);
+    ctx.fillStyle = '#482c14';
+    for (let bx = 0; bx < CELL; bx += 8) {
+      ctx.fillRect(wx + bx, wy, PX, CELL);
+    }
+    ctx.fillStyle = '#d8be88';
+    ctx.fillRect(wx, wy, CELL, PX * 2);
+    ctx.fillRect(wx, wy + CELL - PX * 2, CELL, PX * 2);
+    return;
+  }
+
+  // 'stone' — Terrazas y miradores tallados en roca antigua
+  ctx.fillStyle = (h & 1) === 0 ? '#7e8999' : '#8793a3';
+  ctx.fillRect(wx, wy, CELL, CELL);
+  ctx.fillStyle = '#596575';
+  ctx.fillRect(wx, wy + 16, CELL, PX);
+  ctx.fillRect(wx + 16, wy, PX, CELL);
+  ctx.fillStyle = '#aeb9c7';
+  ctx.fillRect(wx + 4, wy + 4, 9, PX);
 }
 
-function drawSpaceInvaders1978CabinetWorld(
+/** Senderos orgánicos de tierra apisonada, losas y escalinatas de desnivel hechos a mano */
+function drawHandcraftedPathsAndStairs(
   ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  restored: boolean,
-  unlocked: boolean,
-  t: number
+  camX: number,
+  camY: number,
+  vw: number,
+  vh: number
 ): void {
-  ctx.save();
-  ctx.translate(Math.round(cx), Math.round(cy));
+  const drawSteppingPath = (
+    pts: [number, number][],
+    width: number,
+    fillHex: string,
+    borderHex: string
+  ) => {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[i + 1];
+      const minX = Math.min(x0, x1) - width;
+      const minY = Math.min(y0, y1) - width;
+      const boxW = Math.abs(x1 - x0) + width * 2;
+      const boxH = Math.abs(y1 - y0) + width * 2;
+      if (!isWorldBoxVisible(minX, minY, boxW, boxH, camX, camY, vw, vh)) continue;
 
-  ctx.fillStyle = '#0f172a';
-  ctx.beginPath();
-  ctx.ellipse(0, 20, 68, 25, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = restored ? '#39ff14' : unlocked ? '#f97316' : '#64748b';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.ellipse(0, 18, 56, 20, 0, 0, Math.PI * 2);
-  ctx.stroke();
+      const steps = Math.max(2, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 18));
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const px = Math.round(x0 + (x1 - x0) * t);
+        const py = Math.round(y0 + (y1 - y0) * t);
+        ctx.fillStyle = borderHex;
+        ctx.fillRect(px - width / 2 - 2, py - width / 2 - 2, width + 4, width * 0.72 + 4);
+        ctx.fillStyle = fillHex;
+        ctx.fillRect(px - width / 2, py - width / 2, width, width * 0.72);
+      }
+    }
+  };
 
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const g = ctx.createRadialGradient(0, -22, 6, 0, -22, 82);
-  g.addColorStop(
-    0,
-    restored
-      ? 'rgba(57, 255, 20, 0.42)'
-      : unlocked
-      ? 'rgba(249, 115, 22, 0.35)'
-      : 'rgba(148, 163, 184, 0.16)'
+  // Camino orgánico de la Aldea hacia el Mirador Anómalo Este y la Cala Sur
+  drawSteppingPath(
+    [
+      [416, 1764],
+      [560, 1810],
+      [626, 1762],
+      [696, 1816],
+      [840, 1878],
+      [948, 1884],
+    ],
+    28,
+    '#c8ab76',
+    '#7d633c'
   );
-  g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(0, -22, 82, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  drawSteppingPath(
+    [
+      [560, 1810],
+      [540, 1936],
+      [680, 1960],
+      [818, 1952],
+    ],
+    24,
+    '#c8ab76',
+    '#7d633c'
+  );
 
-  ctx.fillStyle = '#09090b';
-  ctx.fillRect(-26, -62, 52, 78);
-  ctx.fillStyle = '#f1f5f9';
-  ctx.fillRect(-24, -60, 4, 74);
-  ctx.fillRect(20, -60, 4, 74);
+  // Sendero forestal sinuoso por El Bosque de las Señales Perdidas
+  drawSteppingPath(
+    [
+      [632, 1600],
+      [672, 1460],
+      [820, 1360],
+      [928, 1280],
+      [964, 1108],
+    ],
+    26,
+    '#9c7a4c',
+    '#574124'
+  );
+  drawSteppingPath(
+    [
+      [928, 1280],
+      [1180, 1288],
+      [1480, 1296],
+      [1620, 1296],
+    ],
+    28,
+    '#b59463',
+    '#664e2e'
+  );
 
-  ctx.fillStyle = '#ea580c';
-  ctx.fillRect(-20, -60, 40, 11);
-  ctx.fillStyle = '#fde047';
-  ctx.font = '700 6px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('INVADERS', 0, -52);
+  // Calzada arqueológica en Las Ruinas del Primer Pulso (une Santuario, Cronoscopio y Portal Sur)
+  drawSteppingPath(
+    [
+      [1620, 1296],
+      [1880, 1280],
+      [1936, 1200],
+      [2150, 1202],
+      [2140, 1420],
+      [2580, 1596],
+      [2816, 1612],
+    ],
+    30,
+    '#b8c2cc',
+    '#526071'
+  );
+  drawSteppingPath(
+    [
+      [1880, 1280],
+      [1760, 1430],
+      [1664, 1536],
+    ],
+    24,
+    '#b8c2cc',
+    '#526071'
+  );
 
-  ctx.fillStyle = '#1e1b4b';
-  ctx.fillRect(-19, -47, 38, 28);
-  ctx.fillStyle = '#020617';
-  ctx.fillRect(-14, -44, 28, 22);
-  ctx.fillStyle = '#ef4444';
-  ctx.fillRect(-11, -42, 22, 2);
-  ctx.fillStyle = '#ffffff';
-  const shift = Math.sin(t * 3.2) * 4;
-  for (let ix = -8; ix <= 8; ix += 8) {
-    ctx.fillRect(ix + shift * 0.4, -36, 4, 3);
+  // Escalinatas talladas en piedra para salvar desniveles entre terrazas
+  const stairConnectors = [
+    { x: 576, y: 1528, w: 112, steps: 5 },
+    { x: 1832, y: 964, w: 120, steps: 6 },
+    { x: 2292, y: 652, w: 88, steps: 5 },
+    { x: 2548, y: 368, w: 120, steps: 5 },
+  ];
+  for (const st of stairConnectors) {
+    if (!isWorldBoxVisible(st.x, st.y, st.w, st.steps * 14, camX, camY, vw, vh)) continue;
+    for (let i = 0; i < st.steps; i++) {
+      const sy = st.y + i * 13;
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(st.x - 2, sy, st.w + 4, 11);
+      ctx.fillStyle = i % 2 === 0 ? '#cbd5e1' : '#94a3b8';
+      ctx.fillRect(st.x, sy + 2, st.w, 7);
+    }
   }
-  ctx.fillStyle = '#39ff14';
-  ctx.fillRect(-10, -27, 4, 2);
-  ctx.fillRect(-2, -27, 4, 2);
-  ctx.fillRect(6, -27, 4, 2);
-
-  ctx.fillStyle = '#cbd5e1';
-  ctx.fillRect(-20, -18, 40, 6);
-  ctx.fillStyle = '#ef4444';
-  ctx.fillRect(8, -17, 4, 3);
-
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(-10, -9, 20, 19);
-  ctx.fillStyle = '#dc2626';
-  ctx.fillRect(-5, -4, 3, 5);
-  ctx.fillRect(2, -4, 3, 5);
-  ctx.restore();
 }
 
-function drawCircuitTree(
+/** Dibuja un Portal Anómalo con distinción visual clara entre estado latente y activo */
+function drawAnomalyPortalWorld(
   ctx: CanvasRenderingContext2D,
-  tree: TreeProp,
-  t: number,
-  pulseBoost: boolean
-): void {
-  ctx.save();
-  ctx.translate(tree.x, tree.y);
-  ctx.scale(tree.scale, tree.scale);
-
-  const leafMain =
-    tree.hue === 'emerald'
-      ? '#059669'
-      : tree.hue === 'cyan'
-      ? '#0891b2'
-      : '#d97706';
-  const leafGlow =
-    tree.hue === 'emerald'
-      ? '#34d399'
-      : tree.hue === 'cyan'
-      ? '#22d3ee'
-      : '#fbbf24';
-
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
-  ctx.beginPath();
-  ctx.ellipse(0, 6, 26, 9, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = '#451a03';
-  ctx.fillRect(-7, -34, 14, 38);
-  ctx.fillStyle = '#92400e';
-  ctx.fillRect(-5, -34, 4, 36);
-  ctx.fillStyle = leafGlow;
-  ctx.globalAlpha = pulseBoost ? 0.9 : 0.55 + Math.sin(t * 3 + tree.x) * 0.25;
-  ctx.fillRect(-1, -32, 2, 30);
-  ctx.globalAlpha = 1;
-
-  ctx.fillStyle = '#064e3b';
-  ctx.fillRect(-28, -58, 56, 26);
-  ctx.fillStyle = leafMain;
-  ctx.fillRect(-24, -72, 48, 28);
-  ctx.fillRect(-16, -84, 32, 16);
-
-  ctx.fillStyle = leafGlow;
-  ctx.fillRect(-18, -64, 5, 5);
-  ctx.fillRect(12, -56, 5, 5);
-  ctx.fillRect(-4, -78, 6, 5);
-  ctx.restore();
-}
-
-function drawDistantLockedIsland(
-  ctx: CanvasRenderingContext2D,
-  ix: number,
-  iy: number,
-  rx: number,
-  ry: number,
-  label: string,
-  accent: string,
-  motif: '80s' | '90s' | 'future',
+  portal: AnomalyPortalSpec,
+  unlocked: boolean,
+  syncedGlyphsCount: number,
   elapsed: number,
   reducedMotion: boolean
 ): void {
-  const floatY = reducedMotion ? 0 : Math.sin(elapsed * 1.4 + ix * 0.01) * 7;
+  const x = Math.round(portal.x);
+  const y = Math.round(portal.y);
+  const t = reducedMotion ? 0 : elapsed;
+
   ctx.save();
-  ctx.translate(ix, iy + floatY);
+  ctx.translate(x, y);
 
-  const mist = ctx.createRadialGradient(0, 0, rx * 0.2, 0, 0, rx * 1.45);
-  mist.addColorStop(0, 'rgba(15, 23, 42, 0.72)');
-  mist.addColorStop(0.6, 'rgba(30, 41, 59, 0.28)');
-  mist.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = mist;
-  ctx.beginPath();
-  ctx.arc(0, 0, rx * 1.45, 0, Math.PI * 2);
-  ctx.fill();
+  // Zócalo hexagonal/escalonado de roca basáltica grabada
+  ctx.fillStyle = '#050811';
+  ctx.fillRect(-34, -10, 68, 24);
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(-30, -8, 60, 20);
+  ctx.fillStyle = unlocked ? portal.accentHex : '#475569';
+  ctx.fillRect(-24, 6, 48, 3);
 
-  ctx.fillStyle = '#0b1329';
-  ctx.beginPath();
-  ctx.moveTo(-rx, 0);
-  ctx.lineTo(-rx * 0.55, ry * 1.45);
-  ctx.lineTo(0, ry * 1.9);
-  ctx.lineTo(rx * 0.62, ry * 1.35);
-  ctx.lineTo(rx, 0);
-  ctx.closePath();
-  ctx.fill();
+  // Pilares gemelos de obsidiana y bronce que enmarcan la anomalía
+  ctx.fillStyle = '#050811';
+  ctx.fillRect(-28, -58, 14, 52);
+  ctx.fillRect(14, -58, 14, 52);
+  ctx.fillRect(-30, -64, 60, 10);
 
-  ctx.fillStyle = '#16213e';
-  ctx.beginPath();
-  ctx.ellipse(0, 0, rx, ry * 0.42, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillStyle = '#273449';
+  ctx.fillRect(-26, -56, 10, 48);
+  ctx.fillRect(16, -56, 10, 48);
+  ctx.fillStyle = '#d8be88';
+  ctx.fillRect(-28, -62, 56, 6);
 
-  ctx.strokeStyle = accent;
-  ctx.globalAlpha = 0.52;
-  ctx.lineWidth = 2;
-  if (motif === '80s') {
-    ctx.strokeRect(-42, -52, 26, 48);
-    ctx.strokeRect(12, -64, 30, 60);
-    ctx.beginPath();
-    ctx.arc(-4, -22, 20, Math.PI, 0);
-    ctx.stroke();
-  } else if (motif === '90s') {
-    ctx.beginPath();
-    ctx.moveTo(-28, -4);
-    ctx.lineTo(-10, -68);
-    ctx.lineTo(8, -4);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(22, -42, 16, 16, 0, 0, Math.PI * 2);
-    ctx.stroke();
+  // 3 Engastes superiores para mostrar progreso de los 3 Símbolos de Pulso si aplica
+  if (portal.requiredSecretIds && portal.requiredSecretIds.length === 3) {
+    for (let i = 0; i < 3; i++) {
+      const lit = i < syncedGlyphsCount;
+      const gx = -14 + i * 14;
+      ctx.fillStyle = '#050811';
+      ctx.fillRect(gx - 4, -71, 8, 8);
+      ctx.fillStyle = lit ? '#00f3ff' : '#334155';
+      ctx.fillRect(gx - 2, -69, 4, 4);
+    }
+  }
+
+  if (unlocked) {
+    // Núcleo energético dimensional sincronizado + fragmentos digitales orbitando
+    const pulse = reducedMotion ? 0.85 : 0.72 + Math.sin(t * 4.5) * 0.2;
+    ctx.fillStyle = '#071326';
+    ctx.fillRect(-16, -54, 32, 46);
+
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = portal.style === 'abyssal-chamber' ? '#7e22ce' : '#0284c7';
+    ctx.fillRect(-14, -50, 28, 38);
+    ctx.fillStyle = portal.accentHex;
+    ctx.fillRect(-9, -43, 18, 24);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-4, -35, 8, 10);
+    ctx.globalAlpha = 1;
+
+    // Fragmentos digitales suspendidos alrededor del umbral
+    for (let k = 0; k < 4; k++) {
+      const ang = t * 2.2 + (k * Math.PI) / 2;
+      const fx = Math.round(Math.cos(ang) * 20);
+      const fy = Math.round(-32 + Math.sin(ang * 1.3) * 14);
+      ctx.fillStyle = k % 2 === 0 ? '#00f3ff' : '#fde047';
+      ctx.fillRect(fx - 2, fy - 2, 4, 4);
+    }
   } else {
+    // Estado inactivo/latente: fisura estática tenue esperando resonancia arqueológica
+    ctx.fillStyle = '#0b101d';
+    ctx.fillRect(-16, -54, 32, 46);
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.ellipse(0, -38, 38, 12, -0.25, 0, Math.PI * 2);
+    ctx.moveTo(-4, -50);
+    ctx.lineTo(3, -36);
+    ctx.lineTo(-3, -24);
+    ctx.lineTo(2, -12);
     ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+/** Estela arqueológica tallada con los glifos de pulso [ ◈ ], [ ◈◈ ], [ ◈◈◈ ] */
+function drawPulseGlyphStele(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  glyphIndex: 1 | 2 | 3,
+  discovered: boolean,
+  accentHex: string,
+  elapsed: number,
+  reducedMotion: boolean
+): void {
+  const x = Math.round(sx);
+  const y = Math.round(sy);
+  const glow = discovered
+    ? 0.95
+    : reducedMotion
+    ? 0.45
+    : 0.35 + Math.sin(elapsed * 3 + glyphIndex) * 0.2;
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  ctx.fillStyle = 'rgba(5, 8, 17, 0.45)';
+  ctx.fillRect(-16, 3, 32, 6);
+
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-14, -36, 28, 40);
+  ctx.fillRect(-10, -42, 20, 8);
+
+  ctx.fillStyle = discovered ? '#334155' : '#475569';
+  ctx.fillRect(-12, -34, 24, 36);
+  ctx.fillStyle = '#64748b';
+  ctx.fillRect(-8, -40, 16, 6);
+
+  // Rombos de pulso grabados en la piedra
+  ctx.globalAlpha = glow;
+  ctx.fillStyle = discovered ? accentHex : '#cbd5e1';
+  for (let i = 0; i < glyphIndex; i++) {
+    const gy = -30 + i * 9;
+    ctx.fillRect(-4, gy, 8, 5);
   }
   ctx.globalAlpha = 1;
 
-  ctx.font = '700 11px "JetBrains Mono", monospace';
+  ctx.restore();
+}
+
+/** Chasis de máquina recreativa olvidada semienterrada en la arena de la costa */
+function drawForgottenCoastalCabinet(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  inspected: boolean,
+  elapsed: number
+): void {
+  const x = Math.round(cx);
+  const y = Math.round(cy);
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Duna de arena que cubre la base inclinada
+  ctx.fillStyle = '#cca862';
+  ctx.fillRect(-24, -4, 48, 12);
+
+  ctx.rotate(-0.12);
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-18, -44, 36, 44);
+  ctx.fillStyle = '#6b4c35';
+  ctx.fillRect(-16, -42, 32, 40);
+  ctx.fillStyle = '#9ca3af';
+  ctx.fillRect(-13, -38, 26, 7);
+
+  // Monitor CRT apagado con un destello fantasma ocasional
+  ctx.fillStyle = '#090d16';
+  ctx.fillRect(-12, -28, 24, 16);
+  if (inspected || Math.floor(elapsed * 2) % 5 === 0) {
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(-6, -21, 12, 2);
+  }
+
+  // Musgo costero sobre el mueble
+  ctx.fillStyle = '#3f7d44';
+  ctx.fillRect(-16, -42, 10, 4);
+  ctx.fillRect(6, -14, 10, 6);
+
+  ctx.restore();
+}
+
+/** Renderiza cada edificio con arquitectura propia de PIXELVERSE (cero tejados clónicos de Pokémon) */
+function drawPixelverseBuilding(
+  ctx: CanvasRenderingContext2D,
+  bldg: ExteriorBuildingSpec,
+  elapsed: number,
+  reducedMotion: boolean,
+  tmReadyFor80s: boolean
+): void {
+  const bx = Math.round(bldg.x);
+  const by = Math.round(bldg.y);
+  const style = bldg.archStyle ?? 'cottage-archive';
+
+  ctx.save();
+
+  // Sombra proyectada en el suelo
+  ctx.fillStyle = 'rgba(5, 9, 18, 0.45)';
+  ctx.fillRect(bx - 6, by + bldg.h - 2, bldg.w + 12, 12);
+
+  if (style === 'chrono-dome') {
+    // OBSERVATORIO DEL CRONOSCOPIO: Cúpula octogonal de obsidiana, bronce y lente temporal cian
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx - 2, by + 22, bldg.w + 4, bldg.h - 20);
+    ctx.fillStyle = bldg.wallHex;
+    ctx.fillRect(bx, by + 24, bldg.w, bldg.h - 24);
+
+    // Contrafuertes de bronce en las esquinas
+    ctx.fillStyle = '#d8be88';
+    ctx.fillRect(bx, by + 24, 10, bldg.h - 24);
+    ctx.fillRect(bx + bldg.w - 10, by + 24, 10, bldg.h - 24);
+    ctx.fillRect(bx, by + bldg.h - 8, bldg.w, 8);
+
+    // Cúpula astronómica escalonada (sin franjas horizontales clónicas)
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx + 8, by + 4, bldg.w - 16, 22);
+    ctx.fillRect(bx + 26, by - 10, bldg.w - 52, 16);
+    ctx.fillRect(bx + 52, by - 18, bldg.w - 104, 10);
+
+    ctx.fillStyle = bldg.roofHex;
+    ctx.fillRect(bx + 10, by + 6, bldg.w - 20, 18);
+    ctx.fillRect(bx + 28, by - 8, bldg.w - 56, 14);
+    ctx.fillStyle = bldg.roofShadeHex;
+    ctx.fillRect(bx + 10, by + 18, bldg.w - 20, 6);
+
+    // Meridiano de latón y lente ocular del Cronoscopio en la cúpula
+    const cx = Math.round(bx + bldg.w / 2);
+    ctx.fillStyle = '#d8be88';
+    ctx.fillRect(cx - 3, by - 16, 6, 38);
+    ctx.fillStyle = '#070b14';
+    ctx.beginPath();
+    ctx.arc(cx, by + 6, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = tmReadyFor80s
+      ? '#00f3ff'
+      : reducedMotion
+      ? '#38bdf8'
+      : Math.floor(elapsed * 2) % 2 === 0
+      ? '#38bdf8'
+      : '#0284c7';
+    ctx.beginPath();
+    ctx.arc(cx, by + 6, 9, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (style === 'forest-workshop') {
+    // TALLER ANALÓGICO DE KERTZ: Madera artesanal, cubierta de cobre oxidado, chimenea y bobina exterior
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx + bldg.w - 28, by - 16, 14, 24);
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(bx + bldg.w - 26, by - 14, 10, 20);
+
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx - 2, by + 24, bldg.w + 4, bldg.h - 22);
+    ctx.fillStyle = bldg.wallHex;
+    ctx.fillRect(bx, by + 26, bldg.w, bldg.h - 26);
+
+    // Entramado de vigas de madera vista
+    ctx.fillStyle = '#6b4423';
+    ctx.fillRect(bx, by + 26, 6, bldg.h - 26);
+    ctx.fillRect(bx + bldg.w - 6, by + 26, 6, bldg.h - 26);
+    ctx.fillRect(bx, by + 54, bldg.w, 4);
+
+    // Cubierta inclinada de placas de cobre verde-azulado con tragaluz de taller
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx - 6, by + 4, bldg.w + 12, 24);
+    ctx.fillStyle = bldg.roofHex;
+    ctx.fillRect(bx - 4, by + 6, bldg.w + 8, 20);
+    ctx.fillStyle = bldg.roofShadeHex;
+    for (let px = bx + 12; px < bx + bldg.w - 8; px += 22) {
+      ctx.fillRect(px, by + 6, 2, 20);
+    }
+    // Tragaluz ámbar
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx + 22, by + 10, 28, 12);
+    ctx.fillStyle = '#fde047';
+    ctx.fillRect(bx + 24, by + 12, 24, 8);
+  } else if (style === 'ruins-sanctuary') {
+    // SANTUARIO DEL ARCHIVO PIONERO: Arquitectura pétrea monumental con friso de circuitos dorados
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx - 4, by + 18, bldg.w + 8, bldg.h - 16);
+    ctx.fillStyle = bldg.wallHex;
+    ctx.fillRect(bx - 2, by + 20, bldg.w + 4, bldg.h - 20);
+
+    // Columnas frontales labradas
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(bx + 8, by + 28, 12, bldg.h - 32);
+    ctx.fillRect(bx + bldg.w - 20, by + 28, 12, bldg.h - 32);
+
+    // Frontón escalonado del templo con emblema cian
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx - 8, by + 4, bldg.w + 16, 18);
+    ctx.fillRect(bx + 18, by - 6, bldg.w - 36, 12);
+    ctx.fillStyle = bldg.roofHex;
+    ctx.fillRect(bx - 6, by + 6, bldg.w + 12, 14);
+    ctx.fillRect(bx + 20, by - 4, bldg.w - 40, 10);
+    ctx.fillStyle = '#d8be88';
+    ctx.fillRect(bx + 4, by + 16, bldg.w - 8, 3);
+  } else {
+    // CENTRO DE HISTORIA EN LA ALDEA: Mampostería cálida, teja artesanal con hastial triangular y antena
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx + 18, by - 18, 4, 18);
+    ctx.fillStyle = '#00f3ff';
+    ctx.fillRect(bx + 16, by - 20, 8, 4);
+
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx - 2, by + 24, bldg.w + 4, bldg.h - 22);
+    ctx.fillStyle = bldg.wallHex;
+    ctx.fillRect(bx, by + 26, bldg.w, bldg.h - 26);
+    ctx.fillStyle = '#a89984';
+    ctx.fillRect(bx, by + bldg.h - 10, bldg.w, 10);
+
+    // Tejado de pizarra terracota con tejas imbricadas y hastial central de madera
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx - 8, by + 6, bldg.w + 16, 22);
+    ctx.fillRect(bx + 24, by - 4, bldg.w - 48, 12);
+    ctx.fillStyle = bldg.roofHex;
+    ctx.fillRect(bx - 6, by + 8, bldg.w + 12, 18);
+    ctx.fillRect(bx + 26, by - 2, bldg.w - 52, 10);
+    ctx.fillStyle = bldg.roofShadeHex;
+    for (let tx = bx; tx < bx + bldg.w; tx += 14) {
+      ctx.fillRect(tx, by + 14, 8, 3);
+    }
+  }
+
+  // Ventanas artesanales cálidas en fachada
+  const drawArchWindow = (wx: number, wy: number, glowHex: string) => {
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(wx, wy, 22, 20);
+    ctx.fillStyle = glowHex;
+    ctx.fillRect(wx + 2, wy + 2, 18, 16);
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(wx + 10, wy + 2, 2, 16);
+    ctx.fillRect(wx + 2, wy + 10, 18, 2);
+  };
+  const winGlow = style === 'chrono-dome' ? '#67e8f9' : '#fef08a';
+  drawArchWindow(bx + 18, by + 42, winGlow);
+  drawArchWindow(bx + bldg.w - 40, by + 42, winGlow);
+
+  // Puerta accesible con dintel de latón y umbral de piedra
+  const dLeft = Math.round(bldg.doorX - 15);
+  ctx.fillStyle = '#d8be88';
+  ctx.fillRect(dLeft - 3, by + bldg.h + 1, 36, 5);
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(dLeft, by + bldg.h - 34, 30, 34);
+  ctx.fillStyle = style === 'chrono-dome' ? '#1e293b' : '#5c3818';
+  ctx.fillRect(dLeft + 2, by + bldg.h - 32, 26, 32);
+  ctx.fillStyle = bldg.trimHex;
+  ctx.fillRect(dLeft + 2, by + bldg.h - 32, 26, 3);
+  ctx.fillStyle = '#f2c94c';
+  ctx.fillRect(dLeft + 21, by + bldg.h - 16, 4, 4);
+
+  // Rótulo arquitectónico limpio sobre el dintel
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(bldg.doorX - 42, by + 10, 84, 14);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(bldg.doorX - 40, by + 12, 80, 10);
+  ctx.fillStyle = '#f8f5e6';
+  ctx.font = '700 8px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.72)';
-  ctx.fillText(label, 0, ry * 0.9);
+  ctx.fillText(bldg.signText, bldg.doorX, by + 20);
+
   ctx.restore();
 }
 
@@ -805,8 +1586,6 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     camera,
     elapsed,
     reducedMotion,
-    stars,
-    ambientBits,
     digitalCritters,
     pickupBursts,
     player,
@@ -828,454 +1607,430 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
 
   ctx.imageSmoothingEnabled = false;
 
-  // 1. Cielo nocturno azul profundo y turquesa cósmico (parallax 0)
-  const skyGrad = ctx.createLinearGradient(0, 0, 0, vh);
-  skyGrad.addColorStop(0, '#020614');
-  skyGrad.addColorStop(0.46, '#061a33');
-  skyGrad.addColorStop(0.82, '#0b3149');
-  skyGrad.addColorStop(1, '#041322');
-  ctx.fillStyle = skyGrad;
+  const animFrame4 = reducedMotion ? 0 : Math.floor(elapsed * 3.2) % 4;
+  const camX = Math.round(camera.x);
+  const camY = Math.round(camera.y);
+  const tmStatus = evaluateTimeMachineStatus(progressState, allUnlocked);
+
+  // 1. MAR PROFUNDO DEL ARCHIPIÉLAGO CON CORRIENTES Y CRESTAS DE ESPUMA ARTESANALES
+  ctx.fillStyle = '#0e3b5e';
   ctx.fillRect(0, 0, vw, vh);
 
-  // Estrellas con parallax multicapa
-  for (const s of stars) {
-    const sx = (((s.nx * vw * 1.4 - camera.x * s.parallax) % vw) + vw) % vw;
-    const sy = (((s.ny * vh * 1.4 - camera.y * s.parallax) % vh) + vh) % vh;
-    const alpha = reducedMotion
-      ? 0.65
-      : 0.35 + 0.55 * (0.5 + 0.5 * Math.sin(elapsed * 2.1 + s.twinkle));
-    ctx.fillStyle = `rgba(224, 242, 254, ${alpha.toFixed(2)})`;
-    ctx.fillRect(Math.round(sx), Math.round(sy), s.size, s.size);
-  }
+  const startTileX = Math.floor(camX / CELL) - 1;
+  const endTileX = Math.ceil((camX + vw) / CELL) + 1;
+  const startTileY = Math.floor(camY / CELL) - 1;
+  const endTileY = Math.ceil((camY + vh) / CELL) + 1;
 
-  // Gran Luna Pálida Pixelada + Cordillera lejana en parallax lento
-  const moonX = vw * 0.72 - (camera.x / ISLAND_WORLD_W - 0.5) * 140;
-  const moonY = vh * 0.18 - (camera.y / ISLAND_WORLD_H - 0.3) * 85;
   ctx.save();
-  const moonHalo = ctx.createRadialGradient(moonX, moonY, 24, moonX, moonY, 175);
-  moonHalo.addColorStop(0, 'rgba(224, 242, 254, 0.30)');
-  moonHalo.addColorStop(0.5, 'rgba(56, 189, 248, 0.10)');
-  moonHalo.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = moonHalo;
-  ctx.beginPath();
-  ctx.arc(moonX, moonY, 175, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.translate(-camX, -camY);
 
-  ctx.fillStyle = '#e2e8f0';
-  ctx.beginPath();
-  ctx.arc(moonX, moonY, 52, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#cbd5e1';
-  ctx.fillRect(Math.round(moonX - 22), Math.round(moonY - 16), 14, 10);
-  ctx.fillRect(Math.round(moonX + 10), Math.round(moonY + 8), 16, 12);
-  ctx.fillRect(Math.round(moonX - 8), Math.round(moonY + 20), 10, 8);
-  ctx.restore();
-
-  // Silueta de cordillera pixelada lejana en el horizonte norte (parallax 0.22)
-  const ridgeBaseY = Math.round(vh * 0.42 - camera.y * 0.12);
-  if (ridgeBaseY > -40 && ridgeBaseY < vh + 120) {
-    ctx.save();
-    ctx.fillStyle = 'rgba(8, 25, 48, 0.72)';
-    ctx.beginPath();
-    ctx.moveTo(0, vh);
-    for (let rx = 0; rx <= vw + 80; rx += 80) {
-      const worldSample = rx + camera.x * 0.22;
-      const peak =
-        Math.sin(worldSample * 0.0045) * 44 + Math.cos(worldSample * 0.011) * 22;
-      ctx.lineTo(rx, ridgeBaseY - peak);
+  for (let ty = startTileY; ty <= endTileY; ty++) {
+    for (let tx = startTileX; tx <= endTileX; tx++) {
+      const wx = tx * CELL;
+      const wy = ty * CELL;
+      const th = hashTile(tx, ty);
+      if ((tx + ty) % 2 === 0) {
+        ctx.fillStyle = '#134973';
+        ctx.fillRect(wx, wy, CELL, CELL);
+      }
+      const waveOffset = ((animFrame4 + (tx % 3)) % 4) * 4;
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(wx + 4 + waveOffset, wy + 10, 10, PX);
+      if (th % 5 === 0) {
+        ctx.fillStyle = '#bae6fd';
+        ctx.fillRect(wx + 8 + waveOffset, wy + 22, 6, PX);
+      }
     }
-    ctx.lineTo(vw, vh);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
   }
 
-  // Reflejos oceánicos sutiles en el mar cósmico
-  ctx.save();
-  ctx.fillStyle = 'rgba(56, 189, 248, 0.07)';
-  for (let i = 0; i < 18; i++) {
-    const wy = ((i * 118 - camera.y * 0.35) % vh + vh) % vh;
-    const wx = ((i * 211 - camera.x * 0.25 + (reducedMotion ? 0 : Math.sin(elapsed + i) * 18)) % vw + vw) % vw;
-    ctx.fillRect(Math.round(wx), Math.round(wy), 38 + (i % 3) * 18, 2);
-  }
-  ctx.restore();
-
-  // ================================================================
-  // CAPA MUNDO CONTINUO (-camera.x, -camera.y) CON VIEWPORT CULLING
-  // ================================================================
-  ctx.save();
-  ctx.translate(-Math.round(camera.x), -Math.round(camera.y));
-
-  // Islas lejanas bloqueadas en el mar de nubes del este
-  if (isWorldBoxVisible(3380, 800, 320, 760, camera.x, camera.y, vw, vh, 240)) {
-    drawDistantLockedIsland(
-      ctx,
-      3535,
-      920,
-      95,
-      58,
-      invadersRestored || allUnlocked
-        ? 'ISLA 1980s · RUTA ACTIVA'
-        : 'ISLA 1980s · EN NIEBLA',
-      '#f43f5e',
-      '80s',
-      elapsed,
-      reducedMotion
-    );
-    drawDistantLockedIsland(
-      ctx,
-      3565,
-      1185,
-      86,
-      52,
-      'ISLA 1990s · SELLADA',
-      '#a855f7',
-      '90s',
-      elapsed,
-      reducedMotion
-    );
-    drawDistantLockedIsland(
-      ctx,
-      3525,
-      1445,
-      78,
-      46,
-      'ERAS FUTURAS',
-      '#38bdf8',
-      'future',
-      elapsed,
-      reducedMotion
-    );
-  }
-
-  // Cascadas luminiscentes al vacío cósmico
-  const drawCosmicWaterfall = (wx: number, wy: number, wWidth: number, wHeight: number) => {
-    if (!isWorldBoxVisible(wx, wy, wWidth, wHeight, camera.x, camera.y, vw, vh)) return;
-    const wfGrad = ctx.createLinearGradient(wx, wy, wx, wy + wHeight);
-    wfGrad.addColorStop(0, 'rgba(56, 189, 248, 0.78)');
-    wfGrad.addColorStop(0.55, 'rgba(0, 243, 255, 0.42)');
-    wfGrad.addColorStop(1, 'rgba(0, 243, 255, 0)');
-    ctx.fillStyle = wfGrad;
-    ctx.fillRect(wx, wy, wWidth, wHeight);
-
-    ctx.fillStyle = 'rgba(224, 242, 254, 0.75)';
-    for (let s = 0; s < 7; s++) {
-      const dropY = reducedMotion ? (s * 42) % wHeight : (elapsed * 140 + s * 47) % wHeight;
-      ctx.fillRect(wx + ((s * 17) % (wWidth - 4)), wy + dropY, 4, 16);
-    }
-  };
-
-  drawCosmicWaterfall(2145, 735, 84, 340);
-  drawCosmicWaterfall(2285, 735, 62, 310);
-  drawCosmicWaterfall(2740, 1915, 96, 280);
-
-  // PASADA 1 DEL TERRENO: Acantilados estratificados inferiores (2.5D)
+  // 2. ACANTILADOS ROCOSOS ESTRATIFICADOS CON RELIEVE Y ROMPIENTE DE OLAS
   for (const r of ISLAND_WALKABLE_RECTS) {
     if (r.requiresCondition === 'south-shortcut' && !southShortcutActive) continue;
     if (r.requiresCondition === 'garganta-bridge' && !glitchTrailCleared) continue;
-    if (r.surface === 'bridge') continue;
-    if (!isWorldBoxVisible(r.x, r.y, r.w, r.h + 52, camera.x, camera.y, vw, vh)) continue;
-
-    const cliffDepth = r.zoneId === 'cavernas-codigo' ? 28 : 48;
-    ctx.fillStyle = r.zoneId === 'cavernas-codigo' ? '#1e1b4b' : '#2b1608';
-    ctx.fillRect(r.x, r.y + r.h - 4, r.w, cliffDepth);
-    ctx.fillStyle = r.zoneId === 'cavernas-codigo' ? '#312e81' : '#4a2610';
-    ctx.fillRect(r.x + 8, r.y + r.h - 4, r.w - 16, Math.round(cliffDepth * 0.55));
-  }
-
-  // PASADA 2 DEL TERRENO: Superficies caminables texturizadas por bioma
-  for (const r of ISLAND_WALKABLE_RECTS) {
-    if (r.requiresCondition === 'south-shortcut' && !southShortcutActive) continue;
-    if (r.requiresCondition === 'garganta-bridge' && !glitchTrailCleared) continue;
-    if (!isWorldBoxVisible(r.x, r.y, r.w, r.h, camera.x, camera.y, vw, vh)) continue;
-
-    if (r.surface === 'sand') {
-      ctx.fillStyle = '#0f3d3e';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.fillStyle = '#d4a373';
-      ctx.fillRect(r.x, r.y + r.h - 42, r.w, 42);
-      ctx.fillRect(r.x, r.y, 34, r.h);
-      const waveShift = reducedMotion ? 0 : Math.sin(elapsed * 2.8) * 5;
-      ctx.fillStyle = 'rgba(103, 232, 249, 0.74)';
-      ctx.fillRect(r.x, Math.round(r.y + r.h - 10 + waveShift * 0.4), r.w, 6);
-    } else if (r.surface === 'grass' || r.surface === 'circuit') {
-      ctx.fillStyle = r.surface === 'circuit' ? '#093028' : '#0f3f30';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      // Trazas internas de placa madre en suelo de circuito
-      if (r.surface === 'circuit') {
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.09)';
-        for (let gx = r.x + 36; gx < r.x + r.w - 24; gx += 72) {
-          ctx.fillRect(gx, r.y + 12, 2, r.h - 24);
-        }
-      }
-      ctx.strokeStyle = 'rgba(52, 211, 153, 0.25)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
-    } else if (r.surface === 'stone') {
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      // Peldaños tallados en escalinatas de transición
-      if (r.id === 'cumbre-stairway' || r.id === 'ruinas-to-pong' || r.id === 'ruinas-to-garganta') {
-        ctx.fillStyle = 'rgba(226, 232, 240, 0.10)';
-        for (let sy = r.y + 18; sy < r.y + r.h - 14; sy += 24) {
-          ctx.fillRect(r.x + 14, sy, r.w - 28, 4);
-        }
-      }
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
-    } else if (r.surface === 'crystal') {
-      ctx.fillStyle = '#171238';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = 'rgba(192, 132, 252, 0.42)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
-    } else if (r.surface === 'fortress') {
-      ctx.fillStyle = '#111827';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = invadersRestored
-        ? 'rgba(57, 255, 20, 0.45)'
-        : 'rgba(249, 115, 22, 0.35)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
-    } else if (r.surface === 'pier') {
-      ctx.fillStyle = '#1e1b38';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.fillStyle = 'rgba(244, 114, 182, 0.16)';
-      for (let px = r.x + 16; px < r.x + r.w - 12; px += 28) {
-        ctx.fillRect(px, r.y + 8, 4, r.h - 16);
-      }
-      ctx.strokeStyle = 'rgba(244, 114, 182, 0.45)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
-    } else if (r.surface === 'bridge') {
-      const bGrad = ctx.createLinearGradient(r.x, r.y, r.x + r.w, r.y);
-      bGrad.addColorStop(0, 'rgba(0, 243, 255, 0.82)');
-      bGrad.addColorStop(0.5, 'rgba(250, 204, 21, 0.86)');
-      bGrad.addColorStop(1, 'rgba(57, 255, 20, 0.82)');
-      ctx.fillStyle = bGrad;
-      ctx.fillRect(r.x, r.y + 12, r.w, r.h - 24);
-      ctx.fillStyle = '#ffffff';
-      for (let sx = r.x + 14; sx < r.x + r.w - 10; sx += 26) {
-        ctx.fillRect(sx, r.y + 16, 12, r.h - 32);
-      }
-    }
-  }
-
-  // Puente Astral fracturado antes de completar El Sendero del Glitch Perdido
-  if (
-    !glitchTrailCleared &&
-    isWorldBoxVisible(2060, 620, 400, 130, camera.x, camera.y, vw, vh)
-  ) {
-    ctx.save();
-    for (let i = 0; i < 6; i++) {
-      const fx = 2085 + i * 58;
-      const fy = 670 + (reducedMotion ? 0 : Math.sin(elapsed * 3.2 + i * 1.4) * 14);
-      ctx.strokeStyle = i % 2 === 0 ? '#00f3ff' : '#9d00ff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(fx, fy, 36, 22);
-    }
-    ctx.font = '700 11px "JetBrains Mono", monospace';
-    ctx.fillStyle = '#67e8f9';
-    ctx.textAlign = 'center';
-    ctx.fillText('PUENTE FRACTURADO · ENTRA AL SENDERO DEL GLITCH', 2255, 646);
-    ctx.restore();
-  }
-
-  if (
-    !southShortcutActive &&
-    isWorldBoxVisible(860, 1640, 720, 110, camera.x, camera.y, vw, vh)
-  ) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(245, 158, 11, 0.32)';
-    ctx.setLineDash([10, 10]);
-    ctx.lineWidth = 3;
-    ctx.strokeRect(865, 1665, 710, 60);
-    ctx.setLineDash([]);
-    ctx.restore();
-  }
-
-  // Venas de circuito luminoso + paquetes de energía viajando entre santuarios
-  const activeSegments = glitchTrailCleared
-    ? [...CIRCUIT_CONDUIT_SEGMENTS, ...NORTH_CONDUIT_SEGMENTS]
-    : CIRCUIT_CONDUIT_SEGMENTS;
-
-  ctx.save();
-  ctx.strokeStyle = pongRestored
-    ? 'rgba(0, 243, 255, 0.62)'
-    : 'rgba(56, 189, 248, 0.28)';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  for (const [a, b] of activeSegments) {
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-  }
-  ctx.stroke();
-
-  if (!reducedMotion) {
-    const pulseProgress = (elapsed * 0.42) % 1;
-    ctx.fillStyle = pongRestored ? '#fef08a' : '#00f3ff';
-    for (const [a, b] of activeSegments) {
-      const px = a.x + (b.x - a.x) * pulseProgress;
-      const py = a.y + (b.y - a.y) * pulseProgress;
-      if (isWorldBoxVisible(px - 6, py - 6, 12, 12, camera.x, camera.y, vw, vh, 40)) {
-        ctx.fillRect(Math.round(px - 3), Math.round(py - 3), 6, 6);
-      }
-    }
-  }
-  ctx.restore();
-
-  // Zona 1: Monolitos del Despertar en la playa
-  if (isWorldBoxVisible(380, 1700, 170, 110, camera.x, camera.y, vw, vh)) {
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(390, 1740, 24, 54);
-    ctx.fillRect(520, 1715, 18, 42);
-    ctx.fillStyle = '#00f3ff';
-    ctx.fillRect(398, 1752, 8, 22);
-  }
-
-  // Zona 3: Columnas y Mosaico de las Ruinas del Primer Arcade
-  if (isWorldBoxVisible(1580, 1090, 560, 420, camera.x, camera.y, vw, vh)) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(1865, 1340, 96, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(1865, 1340, 54, 0, Math.PI * 2);
-    ctx.stroke();
-
-    const pillarCoords = [
-      [1610, 1150],
-      [2110, 1150],
-      [1610, 1480],
-      [2110, 1480],
-    ];
-    for (const [px, py] of pillarCoords) {
-      ctx.fillStyle = '#475569';
-      ctx.fillRect(px - 14, py - 46, 28, 52);
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillRect(px - 18, py - 52, 36, 8);
-      ctx.fillStyle = '#f59e0b';
-      ctx.fillRect(px - 4, py - 34, 8, 22);
-    }
-    ctx.restore();
-  }
-
-  // Zona 7: Cristales gigantes de cuarzo cian y violeta en Las Cavernas del Código
-  const crystalSpots = [
-    [310, 410, '#a855f7'],
-    [450, 395, '#00f3ff'],
-    [690, 405, '#c084fc'],
-    [890, 520, '#00f3ff'],
-    [330, 710, '#a855f7'],
-  ] as const;
-  for (const [cx, cy, col] of crystalSpots) {
-    if (!isWorldBoxVisible(cx - 24, cy - 44, 48, 60, camera.x, camera.y, vw, vh)) continue;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(0, -38);
-    ctx.lineTo(14, -8);
-    ctx.lineTo(8, 12);
-    ctx.lineTo(-10, 12);
-    ctx.lineTo(-15, -12);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.globalAlpha = 0.45;
-    ctx.fillRect(-3, -28, 4, 22);
-    ctx.restore();
-  }
-
-  const cavernOpen =
-    allUnlocked ||
-    progressState.island70s.activatedIslandSwitches.includes('sw-caverna-cristal');
-  if (!cavernOpen && isWorldBoxVisible(775, 405, 98, 82, camera.x, camera.y, vw, vh)) {
-    ctx.save();
-    ctx.strokeStyle = '#c084fc';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(775, 405, 98, 82);
-    ctx.fillStyle = 'rgba(168, 85, 247, 0.22)';
-    ctx.fillRect(775, 405, 98, 82);
-    ctx.restore();
-  }
-
-  // Zona 2: Criaturas benignas digitales («Pulsos de Fósforo»)
-  for (const crit of digitalCritters) {
-    const cx = crit.homeX + (reducedMotion ? 0 : Math.sin(elapsed * 1.7 + crit.phase) * 34);
-    const cy =
-      crit.homeY +
-      (reducedMotion
-        ? 0
-        : Math.cos(elapsed * 1.3 + crit.phase) * 18 -
-          Math.abs(Math.sin(elapsed * 5.2 + crit.phase)) * 7);
-    if (!isWorldBoxVisible(cx - 10, cy - 10, 20, 20, camera.x, camera.y, vw, vh)) continue;
-    ctx.fillStyle = crit.color;
-    ctx.fillRect(Math.round(cx - 5), Math.round(cy - 5), 10, 8);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(Math.round(cx - 3), Math.round(cy - 3), 2, 2);
-    ctx.fillRect(Math.round(cx + 1), Math.round(cy - 3), 2, 2);
-  }
-
-  // Árboles de circuito con culling
-  for (const tree of CIRCUIT_TREES) {
-    if (!isWorldBoxVisible(tree.x - 42, tree.y - 96, 84, 110, camera.x, camera.y, vw, vh)) {
+    if (!isWorldBoxVisible(r.x - 20, r.y - 20, r.w + 40, r.h + 52, camX, camY, vw, vh)) {
       continue;
     }
-    drawCircuitTree(ctx, tree, elapsed, pongRestored);
+
+    if (r.surface !== 'bridge' && r.surface !== 'pier') {
+      // Espuma de marea animada alrededor de los acantilados
+      ctx.fillStyle = animFrame4 % 2 === 0 ? '#e0f2fe' : '#7dd3fc';
+      ctx.fillRect(r.x - 8, r.y - 6, r.w + 16, r.h + 28);
+
+      // Pared de roca estratificada de dos niveles bajo cada meseta
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(r.x - 4, r.y - 4, r.w + 8, r.h + 24);
+      ctx.fillStyle =
+        r.surface === 'fortress'
+          ? '#24161e'
+          : r.surface === 'crystal'
+          ? '#17132b'
+          : '#5c4228';
+      ctx.fillRect(r.x - 2, r.y + r.h, r.w + 4, 18);
+      ctx.fillStyle =
+        r.surface === 'fortress'
+          ? '#3b2531'
+          : r.surface === 'crystal'
+          ? '#282147'
+          : '#7d5a38';
+      for (let rx = r.x + 6; rx < r.x + r.w - 14; rx += 28) {
+        ctx.fillRect(rx, r.y + r.h + 3, 16, 6);
+      }
+    }
   }
 
-  // Zona 5: Portal espiral a «El Sendero del Glitch Perdido»
+  // 3. SUPERFICIES NATURALES Y ARQUEOLÓGICAS DE LOS 9 SECTORES
+  for (const r of ISLAND_WALKABLE_RECTS) {
+    if (r.requiresCondition === 'south-shortcut' && !southShortcutActive) continue;
+    if (r.requiresCondition === 'garganta-bridge' && !glitchTrailCleared) continue;
+    if (!isWorldBoxVisible(r.x, r.y, r.w, r.h, camX, camY, vw, vh)) continue;
+
+    const rTx0 = Math.max(startTileX, Math.floor(r.x / CELL));
+    const rTx1 = Math.min(endTileX, Math.ceil((r.x + r.w) / CELL) - 1);
+    const rTy0 = Math.max(startTileY, Math.floor(r.y / CELL));
+    const rTy1 = Math.min(endTileY, Math.ceil((r.y + r.h) / CELL) - 1);
+
+    for (let ty = rTy0; ty <= rTy1; ty++) {
+      for (let tx = rTx0; tx <= rTx1; tx++) {
+        drawGbcWalkableSurfaceTile(
+          ctx,
+          tx,
+          ty,
+          tx * CELL,
+          ty * CELL,
+          r.surface,
+          r.zoneId,
+          animFrame4
+        );
+      }
+    }
+
+    ctx.strokeStyle = 'rgba(7, 11, 20, 0.72)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+  }
+
+  // 3B. SENDEROS ORGÁNICOS Y ESCALINATAS TALLADAS ENTRE DESNIVELES
+  drawHandcraftedPathsAndStairs(ctx, camX, camY, vw, vh);
+
+  // 4. COMPOSICIÓN AMBIENTAL ARTESANAL POR SECTOR
+  // 4A. Arroyo cristalino y puente de madera hacia el Claro de Pong (1972)
+  if (isWorldBoxVisible(2592, 1440, 64, 480, camX, camY, vw, vh)) {
+    for (let cy = 1440; cy < 1920; cy += CELL) {
+      ctx.fillStyle = '#1d6f96';
+      ctx.fillRect(2600, cy, 40, CELL);
+      ctx.fillStyle = '#7dd3fc';
+      const wyShift = (animFrame4 * 6) % 24;
+      ctx.fillRect(2608, cy + wyShift, 12, PX * 2);
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(2598, cy, PX, CELL);
+      ctx.fillRect(2640, cy, PX, CELL);
+    }
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(2590, 1580, 60, 72);
+    ctx.fillStyle = '#c89048';
+    ctx.fillRect(2592, 1584, 56, 64);
+    ctx.fillStyle = '#684018';
+    for (let px = 2596; px < 2648; px += 10) {
+      ctx.fillRect(px, 1584, PX, 64);
+    }
+    ctx.fillStyle = '#d8be88';
+    ctx.fillRect(2592, 1584, 56, 4);
+    ctx.fillRect(2592, 1644, 56, 4);
+  }
+
+  // 4B. Fosos magmáticos y murallas del Bastión de las Oleadas (1978)
+  for (const lava of VOLCANIC_LAVA_POOLS) {
+    if (!isWorldBoxVisible(lava.x, lava.y, lava.w, lava.h, camX, camY, vw, vh)) continue;
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(lava.x - 4, lava.y - 4, lava.w + 8, lava.h + 8);
+    ctx.fillStyle = '#381c20';
+    ctx.fillRect(lava.x - 2, lava.y - 2, lava.w + 4, lava.h + 4);
+
+    for (let ly = lava.y; ly < lava.y + lava.h; ly += CELL) {
+      for (let lx = lava.x; lx < lava.x + lava.w; lx += CELL) {
+        const cw = Math.min(CELL, lava.x + lava.w - lx);
+        const ch = Math.min(CELL, lava.y + lava.h - ly);
+        ctx.fillStyle = '#b82018';
+        ctx.fillRect(lx, ly, cw, ch);
+        const shift = ((animFrame4 + Math.floor(lx / CELL)) % 4) * 4;
+        ctx.fillStyle = '#f26419';
+        ctx.fillRect(lx + 4, ly + 4 + (shift % 12), Math.max(4, cw - 8), 8);
+        ctx.fillStyle = '#ffba08';
+        ctx.fillRect(lx + 8, ly + 8 + (shift % 10), Math.max(2, cw - 18), 4);
+      }
+    }
+  }
+
+  if (isWorldBoxVisible(2400, 400, 816, 48, camX, camY, vw, vh)) {
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(2868, 412, 348, 24);
+    ctx.fillStyle = '#56404a';
+    ctx.fillRect(2870, 414, 344, 20);
+    for (let mx = 2874; mx < 3210; mx += 24) {
+      ctx.fillStyle = '#241820';
+      ctx.fillRect(mx, 406, 12, 10);
+    }
+  }
+
+  // 4C. Cascada animada con pasadizo secreto a la Gruta Subterránea
+  if (
+    isWorldBoxVisible(
+      WATERFALL_SECRET_ENTRANCE.x - 48,
+      WATERFALL_SECRET_ENTRANCE.y - 64,
+      96,
+      96,
+      camX,
+      camY,
+      vw,
+      vh
+    )
+  ) {
+    const wx = WATERFALL_SECRET_ENTRANCE.x - 24;
+    const wy = WATERFALL_SECRET_ENTRANCE.y - 44;
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(wx - 2, wy - 2, 52, 56);
+    ctx.fillStyle = '#1d6f96';
+    ctx.fillRect(wx, wy, 48, 52);
+
+    const discoveredWf =
+      progressState.rpg.discoveredSecretIds.includes('secret-cascada-gruta');
+    if (discoveredWf) {
+      ctx.fillStyle = '#090d18';
+      ctx.fillRect(wx + 12, wy + 18, 24, 34);
+    }
+    ctx.fillStyle = '#7dd3fc';
+    for (let sy = 0; sy < 48; sy += 12) {
+      const dropY = wy + ((sy + animFrame4 * 4) % 48);
+      ctx.fillRect(wx + 4, dropY, 6, 8);
+      ctx.fillRect(wx + 38, dropY, 6, 8);
+      if (!discoveredWf) {
+        ctx.fillRect(wx + 20, dropY, 8, 8);
+      }
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(wx - 2, wy + 48, 52, 6);
+  }
+
+  // 4D. La Aldea de los Orígenes: Fuente de las Primeras Señales, bancos de madera y cercas rústicas
+  if (isWorldBoxVisible(340, 1700, 520, 220, camX, camY, vw, vh)) {
+    const drawRusticFence = (fx: number, fy: number, count: number) => {
+      for (let i = 0; i < count; i++) {
+        const x = fx + i * 16;
+        ctx.fillStyle = '#070b14';
+        ctx.fillRect(x, fy, 16, 13);
+        ctx.fillStyle = '#b07d48';
+        ctx.fillRect(x + 2, fy + 2, 4, 9);
+        ctx.fillRect(x + 10, fy + 2, 4, 9);
+        ctx.fillStyle = '#d8be88';
+        ctx.fillRect(x, fy + 5, 16, 3);
+      }
+    };
+    drawRusticFence(352, 1712, 7);
+    drawRusticFence(724, 1712, 5);
+
+    // Fuente/Pozo circular de piedra en la plazuela de la Aldea (x=592, y=1848)
+    const fx = 592;
+    const fy = 1848;
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(fx - 20, fy - 14, 40, 26);
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(fx - 18, fy - 12, 36, 22);
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(fx - 14, fy - 8, 28, 14);
+    ctx.fillStyle = animFrame4 % 2 === 0 ? '#7dd3fc' : '#e0f2fe';
+    ctx.fillRect(fx - 4, fy - 5, 8, 8);
+
+    // Bancos de descanso artesanales junto a la fuente
+    const drawBench = (bx: number, by: number) => {
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(bx - 14, by - 6, 28, 12);
+      ctx.fillStyle = '#8b5a2b';
+      ctx.fillRect(bx - 12, by - 4, 24, 8);
+      ctx.fillStyle = '#d8be88';
+      ctx.fillRect(bx - 12, by - 4, 24, 2);
+    };
+    drawBench(544, 1848);
+    drawBench(640, 1848);
+  }
+
+  // 4E. Mosaico Astral en la Plaza de Las Ruinas del Primer Pulso (frente al Cronoscopio)
+  if (isWorldBoxVisible(1860, 1220, 260, 140, camX, camY, vw, vh)) {
+    const mx = 1996;
+    const my = 1284;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.38)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(mx, my, 42, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(216, 190, 136, 0.5)';
+    ctx.strokeRect(mx - 28, my - 28, 56, 56);
+    ctx.restore();
+  }
+
+  // 4F. La Costa de las Máquinas Olvidadas: Columnas antiguas, Altar del Origen y Recreativa semienterrada
+  if (isWorldBoxVisible(3080, 1390, 260, 190, camX, camY, vw, vh)) {
+    const drawRuinPillar = (px: number, py: number, broken: boolean) => {
+      const h = broken ? 24 : 38;
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(px - 10, py - h, 20, h + 4);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillRect(px - 8, py - h + 2, 16, h);
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(px + 2, py - h + 2, 6, h);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(px - 10, py - 4, 20, 6);
+    };
+    drawRuinPillar(3196, 1488, false);
+    drawRuinPillar(3300, 1488, true);
+    drawRuinPillar(3196, 1548, true);
+    drawRuinPillar(3300, 1548, false);
+
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(3230, 1484, 36, 28);
+    ctx.fillStyle = '#d9b878';
+    ctx.fillRect(3232, 1486, 32, 24);
+    ctx.fillStyle = animFrame4 % 2 === 0 ? '#5cc8ff' : '#fde047';
+    ctx.fillRect(3242, 1492, 12, 12);
+
+    drawForgottenCoastalCabinet(
+      ctx,
+      3128,
+      1428,
+      progressState.rpg.discoveredSecretIds.includes('secret-costa-recreativa'),
+      elapsed
+    );
+  }
+
+  // 4G. Las 3 Estelas Arqueológicas de Símbolos de Pulso ([ ◈ ], [ ◈◈ ], [ ◈◈◈ ])
+  const glyphSteles: { x: number; y: number; idx: 1 | 2 | 3; sec: string; hex: string }[] = [
+    { x: 828, y: 1948, idx: 1, sec: 'secret-glyph-1', hex: '#38bdf8' },
+    { x: 1192, y: 956, idx: 2, sec: 'secret-glyph-2', hex: '#34d399' },
+    { x: 3064, y: 1764, idx: 3, sec: 'secret-glyph-3', hex: '#fde047' },
+  ];
+  for (const gs of glyphSteles) {
+    if (isWorldBoxVisible(gs.x - 24, gs.y - 48, 48, 56, camX, camY, vw, vh)) {
+      drawPulseGlyphStele(
+        ctx,
+        gs.x,
+        gs.y,
+        gs.idx,
+        allUnlocked || progressState.rpg.discoveredSecretIds.includes(gs.sec),
+        gs.hex,
+        elapsed,
+        reducedMotion
+      );
+    }
+  }
+
+  // 5. TÚNELES SUBTERRÁNEOS EN ROCAS, CARTELES Y TERMINAL DE GUARDADO
+  for (const tunnel of COASTAL_SUBTERRANEAN_TUNNELS) {
+    if (isWorldBoxVisible(tunnel.x - 28, tunnel.y - 38, 56, 48, camX, camY, vw, vh)) {
+      drawGbcRockTunnelEntrance(ctx, tunnel.x, tunnel.y);
+    }
+  }
+
+  for (const sign of ISLAND_WOODEN_SIGNS) {
+    if (isWorldBoxVisible(sign.x - 20, sign.y - 30, 40, 40, camX, camY, vw, vh)) {
+      drawGbcWoodenSign(ctx, sign.x, sign.y);
+    }
+  }
+
+  if (
+    isWorldBoxVisible(
+      VILLAGE_SAVE_TERMINAL.x - 24,
+      VILLAGE_SAVE_TERMINAL.y - 36,
+      48,
+      48,
+      camX,
+      camY,
+      vw,
+      vh
+    )
+  ) {
+    drawGbcSaveTerminal(
+      ctx,
+      VILLAGE_SAVE_TERMINAL.x,
+      VILLAGE_SAVE_TERMINAL.y,
+      elapsed,
+      Boolean(progressState.rpg.lastManualSaveIso)
+    );
+  }
+
+  // 5B. PORTALES ANÓMALOS DE PIXELVERSE (Inactivos vs Sincronizados)
+  const syncedGlyphsCount = ['secret-glyph-1', 'secret-glyph-2', 'secret-glyph-3'].filter(
+    (id) => allUnlocked || progressState.rpg.discoveredSecretIds.includes(id)
+  ).length;
+
+  for (const portal of ISLAND_ANOMALY_PORTALS) {
+    if (!isWorldBoxVisible(portal.x - 40, portal.y - 76, 80, 96, camX, camY, vw, vh)) {
+      continue;
+    }
+    const unlocked =
+      allUnlocked ||
+      !portal.requiredSecretIds ||
+      portal.requiredSecretIds.every((req) =>
+        progressState.rpg.discoveredSecretIds.includes(req)
+      );
+    drawAnomalyPortalWorld(
+      ctx,
+      portal,
+      unlocked,
+      syncedGlyphsCount,
+      elapsed,
+      reducedMotion
+    );
+  }
+
+  // Criaturas ambientales amistosas (luciérnagas de señal en Bosque y Praderas)
+  for (const critter of digitalCritters) {
+    const cx = Math.round(
+      critter.homeX + (reducedMotion ? 0 : Math.sin(elapsed * 1.6 + critter.phase) * 24)
+    );
+    const cy = Math.round(
+      critter.homeY + (reducedMotion ? 0 : Math.cos(elapsed * 2.1 + critter.phase) * 14)
+    );
+    if (!isWorldBoxVisible(cx - 8, cy - 8, 16, 16, camX, camY, vw, vh)) continue;
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(cx - 4, cy - 4, 8, 6);
+    ctx.fillStyle = critter.color;
+    ctx.fillRect(cx - 2, cy - 2, 4, 3);
+  }
+
+  // 6. PORTAL DEL SENDERO DEL GLITCH, PLATAFORMA ESTELAR, MONOLITOS Y OBJETOS DE SUELO
   {
     const gp = ISLAND_KEY_COORDS.glitchTrailPortal;
-    if (isWorldBoxVisible(gp.x - 54, gp.y - 80, 108, 100, camera.x, camera.y, vw, vh)) {
+    if (isWorldBoxVisible(gp.x - 54, gp.y - 80, 108, 100, camX, camY, vw, vh)) {
       ctx.save();
-      ctx.translate(gp.x, gp.y);
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(-42, -64, 14, 72);
-      ctx.fillRect(28, -64, 14, 72);
-      ctx.fillRect(-46, -72, 92, 12);
-
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      for (let r = 0; r < 3; r++) {
-        ctx.strokeStyle = r % 2 === 0 ? '#00f3ff' : '#a855f7';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.ellipse(
-          0,
-          -28,
-          18 + r * 6,
-          28 + r * 4,
-          reducedMotion ? 0 : Math.sin(elapsed * 2 + r) * 0.25,
-          0,
-          Math.PI * 2
-        );
-        ctx.stroke();
-      }
-      ctx.restore();
+      ctx.translate(Math.round(gp.x), Math.round(gp.y));
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(-42, -68, 84, 74);
+      ctx.fillStyle = '#56404a';
+      ctx.fillRect(-40, -66, 14, 70);
+      ctx.fillRect(26, -66, 14, 70);
+      ctx.fillRect(-44, -72, 88, 12);
+      ctx.fillStyle = animFrame4 % 2 === 0 ? '#1d669c' : '#7b2cbf';
+      ctx.fillRect(-26, -60, 52, 62);
+      ctx.fillStyle = '#5cc8ff';
+      ctx.fillRect(-16, -48 + (animFrame4 % 3) * 4, 32, 36);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-6, -34, 12, 12);
       ctx.restore();
     }
   }
 
-  // Zona 6: Plataforma Estelar de Aterrizaje y Nave Estelar
   {
     const pad = ISLAND_KEY_COORDS.starShuttlePad;
-    if (isWorldBoxVisible(pad.x - 220, pad.y - 340, 340, 400, camera.x, camera.y, vw, vh)) {
+    if (isWorldBoxVisible(pad.x - 220, pad.y - 340, 340, 400, camX, camY, vw, vh)) {
       ctx.save();
-      ctx.translate(pad.x, pad.y + 16);
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 74, 26, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = invadersRestored ? '#00f3ff' : '#475569';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 62, 21, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.translate(Math.round(pad.x), Math.round(pad.y + 12));
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(-56, -20, 112, 40);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(-52, -16, 104, 32);
+      ctx.strokeStyle = invadersRestored ? '#5cc8ff' : '#94a3b8';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-44, -10, 88, 20);
       ctx.restore();
 
       if (flight.type === 'shuttle-landing') {
@@ -1284,195 +2039,102 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
         const easeOut = 1 - Math.pow(1 - lp, 3);
         const sx = pad.x - 190 * (1 - easeOut);
         const sy = pad.y - 310 * (1 - easeOut);
-        const canopy = p > 0.72 ? Math.min(1, (p - 0.72) / 0.16) : 0;
-        drawStarShuttle(
-          ctx,
-          sx,
-          sy,
-          0.75 + 0.35 * easeOut,
-          (1 - easeOut) * 0.16,
-          canopy,
-          p < 0.78,
-          p < 0.7,
-          skinColor,
-          hairColor,
-          shirtColor
-        );
+        drawStarShuttle(ctx, sx, sy, 0.8 + 0.25 * easeOut, (1 - easeOut) * 0.14, p < 0.74);
       } else if (invadersRestored) {
-        drawStarShuttle(
-          ctx,
-          pad.x,
-          pad.y,
-          1.1,
-          0,
-          1,
-          false,
-          false,
-          skinColor,
-          hairColor,
-          shirtColor
-        );
+        drawStarShuttle(ctx, pad.x, pad.y, 1.05, 0, false);
       }
     }
   }
 
-  // Zona 8: Astrolabio de las Eras en La Cumbre del Arquitecto
   {
     const ast = ISLAND_KEY_COORDS.architectAstrolabe;
-    if (isWorldBoxVisible(ast.x - 70, ast.y - 70, 140, 110, camera.x, camera.y, vw, vh)) {
+    if (isWorldBoxVisible(ast.x - 70, ast.y - 70, 140, 110, camX, camY, vw, vh)) {
       ctx.save();
-      ctx.translate(ast.x, ast.y);
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath();
-      ctx.ellipse(0, 20, 62, 22, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.translate(Math.round(ast.x), Math.round(ast.y));
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(-48, 0, 96, 28);
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(-44, 4, 88, 20);
 
-      const rings = [
-        { r: 34, on: pongRestored, color: '#facc15', speed: 1.1 },
-        { r: 25, on: glitchTrailCleared, color: '#00f3ff', speed: -1.6 },
-        { r: 16, on: invadersRestored, color: '#39ff14', speed: 2.2 },
-      ];
-      for (const ring of rings) {
-        ctx.save();
-        ctx.translate(0, -24);
-        ctx.rotate(reducedMotion ? 0.35 : elapsed * ring.speed);
-        ctx.strokeStyle = ring.on ? ring.color : 'rgba(148, 163, 184, 0.35)';
-        ctx.lineWidth = ring.on ? 3 : 1.5;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, ring.r, ring.r * 0.55, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      ctx.fillStyle = '#e0f2fe';
-      ctx.fillRect(-5, -29, 10, 10);
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(-20, -44, 40, 46);
+      ctx.fillStyle = '#d9b878';
+      ctx.fillRect(-16, -40, 32, 40);
+      ctx.fillStyle = pongRestored ? '#8cd96c' : '#475569';
+      ctx.fillRect(-12, -34, 8, 8);
+      ctx.fillStyle = glitchTrailCleared ? '#5cc8ff' : '#475569';
+      ctx.fillRect(-4, -22, 8, 8);
+      ctx.fillStyle = invadersRestored ? '#f26419' : '#475569';
+      ctx.fillRect(4, -34, 8, 8);
       ctx.restore();
     }
   }
 
-  // Zona 9: Telescopios Astrales
   for (const vista of DISTANT_DECADE_VISTAS) {
-    if (!isWorldBoxVisible(vista.x - 20, vista.y - 30, 40, 40, camera.x, camera.y, vw, vh)) {
+    if (!isWorldBoxVisible(vista.x - 20, vista.y - 30, 40, 40, camX, camY, vw, vh)) {
       continue;
     }
     ctx.save();
-    ctx.translate(vista.x, vista.y);
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(-5, -18, 10, 22);
+    ctx.translate(Math.round(vista.x), Math.round(vista.y));
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(-6, -20, 12, 24);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(-4, -18, 8, 20);
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(-10, -26, 24, 10);
     ctx.fillStyle = vista.accentHex;
-    ctx.fillRect(-8, -24, 22, 7);
+    ctx.fillRect(-8, -24, 20, 6);
     ctx.restore();
   }
 
-  // Pedestales / Interruptores de resonancia
   for (const sw of ISLAND_SWITCHES) {
-    if (!isWorldBoxVisible(sw.x - 24, sw.y - 32, 48, 48, camera.x, camera.y, vw, vh)) continue;
+    if (!isWorldBoxVisible(sw.x - 24, sw.y - 32, 48, 48, camX, camY, vw, vh)) continue;
     const active = progressState.island70s.activatedIslandSwitches.includes(sw.id);
     ctx.save();
-    ctx.translate(sw.x, sw.y);
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(-12, -16, 24, 22);
-    ctx.fillStyle = active ? sw.accentHex : '#64748b';
-    ctx.shadowColor = sw.accentHex;
-    ctx.shadowBlur = active ? 16 : 4;
-    ctx.fillRect(-7, -26, 14, 12);
-    ctx.shadowBlur = 0;
+    ctx.translate(Math.round(sw.x), Math.round(sw.y));
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(-14, -24, 28, 30);
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(-12, -16, 24, 20);
+    ctx.fillStyle = active ? sw.accentHex : '#334155';
+    ctx.fillRect(-8, -22, 16, 10);
     ctx.restore();
   }
 
-  // Sombras del Pasado (Ecos holográficos 1958, 1962, 1971)
   for (const echo of ISLAND_ECHOES) {
-    if (!isWorldBoxVisible(echo.x - 26, echo.y - 36, 52, 52, camera.x, camera.y, vw, vh)) continue;
+    if (!isWorldBoxVisible(echo.x - 26, echo.y - 36, 52, 52, camX, camY, vw, vh)) continue;
     const discovered = progressState.island70s.discoveredEchoIds.includes(echo.id);
-    const pulse = reducedMotion ? 0 : Math.sin(elapsed * 3.5 + echo.x) * 4;
     ctx.save();
-    ctx.translate(echo.x, echo.y + pulse);
-    ctx.globalAlpha = discovered ? 0.92 : 0.72;
-    ctx.strokeStyle = echo.accentHex;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, -14, 18, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.font = '700 9px "JetBrains Mono", monospace';
+    ctx.translate(Math.round(echo.x), Math.round(echo.y));
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(-16, -32, 32, 36);
+    ctx.fillStyle = discovered ? '#334155' : '#1e293b';
+    ctx.fillRect(-14, -30, 28, 32);
     ctx.fillStyle = echo.accentHex;
+    ctx.fillRect(-10, -26, 20, 14);
+    ctx.fillStyle = '#070b14';
+    ctx.font = '700 8px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(String(echo.year), 0, -11);
+    ctx.fillText(String(echo.year), 0, -16);
     ctx.restore();
   }
 
-  // Diamantes de Memoria Cian en el mundo (solo los aún no recolectados)
   for (const dia of ISLAND_DIAMONDS) {
     if (progressState.island70s.collectedDiamondIds.includes(dia.id)) continue;
     if (dia.requiresShortcut && !southShortcutActive) continue;
-    if (!isWorldBoxVisible(dia.x - 24, dia.y - 32, 48, 48, camera.x, camera.y, vw, vh)) continue;
-    const bob = reducedMotion ? 0 : Math.sin(elapsed * 4.2 + dia.x) * 5;
+    if (!isWorldBoxVisible(dia.x - 24, dia.y - 32, 48, 48, camX, camY, vw, vh)) continue;
+    const bob = reducedMotion ? 0 : animFrame4 % 2 === 0 ? -2 : 0;
     ctx.save();
-    ctx.translate(dia.x, dia.y + bob);
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(0, 243, 255, 0.32)';
-    ctx.beginPath();
-    ctx.arc(0, -10, 20, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    ctx.fillStyle = '#00f3ff';
-    ctx.beginPath();
-    ctx.moveTo(0, -24);
-    ctx.lineTo(12, -10);
-    ctx.lineTo(0, 4);
-    ctx.lineTo(-12, -10);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#e0f2fe';
-    ctx.fillRect(-3, -18, 5, 7);
+    ctx.translate(Math.round(dia.x), Math.round(dia.y + bob));
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(-10, -22, 20, 20);
+    ctx.fillStyle = '#5cc8ff';
+    ctx.fillRect(-8, -20, 16, 16);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-4, -18, 6, 6);
     ctx.restore();
   }
 
-  // Gabinetes históricos físicos en la Gran Isla de los 70
-  if (
-    isWorldBoxVisible(
-      ISLAND_KEY_COORDS.pongCabinet.x - 75,
-      ISLAND_KEY_COORDS.pongCabinet.y - 80,
-      150,
-      120,
-      camera.x,
-      camera.y,
-      vw,
-      vh
-    )
-  ) {
-    drawPong1972CabinetWorld(
-      ctx,
-      ISLAND_KEY_COORDS.pongCabinet.x,
-      ISLAND_KEY_COORDS.pongCabinet.y,
-      pongRestored,
-      elapsed
-    );
-  }
-
-  if (
-    isWorldBoxVisible(
-      ISLAND_KEY_COORDS.invadersCabinet.x - 80,
-      ISLAND_KEY_COORDS.invadersCabinet.y - 85,
-      160,
-      125,
-      camera.x,
-      camera.y,
-      vw,
-      vh
-    )
-  ) {
-    drawSpaceInvaders1978CabinetWorld(
-      ctx,
-      ISLAND_KEY_COORDS.invadersCabinet.x,
-      ISLAND_KEY_COORDS.invadersCabinet.y,
-      invadersRestored,
-      invadersCabinetUnlocked,
-      elapsed
-    );
-  }
-
-  // Tablas voladoras estacionadas dentro de la misma isla de los 70
   if (
     pongRestored &&
     flight.type !== 'pong-to-garganta' &&
@@ -1504,102 +2166,14 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     );
   }
 
-  // Edificios accesibles con arquitectura pixel-art nítida, tejados y puertas
-  for (const bldg of ISLAND_70S_BUILDINGS) {
-    if (
-      !isWorldBoxVisible(
-        bldg.x - 24,
-        bldg.y - 44,
-        bldg.w + 48,
-        bldg.h + 70,
-        camera.x,
-        camera.y,
-        vw,
-        vh
-      )
-    ) {
-      continue;
-    }
-    ctx.save();
-    // Sombra proyectada del edificio
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
-    ctx.fillRect(bldg.x - 6, bldg.y + bldg.h - 4, bldg.w + 12, 16);
-
-    // Muros de piedra/ladrillo pixelados
-    ctx.fillStyle = bldg.wallHex;
-    ctx.fillRect(bldg.x, bldg.y + 24, bldg.w, bldg.h - 24);
-    ctx.strokeStyle = bldg.trimHex;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(bldg.x + 1, bldg.y + 24, bldg.w - 2, bldg.h - 25);
-
-    // Tejado escalonado estilo RPG clásico GBA
-    ctx.fillStyle = bldg.roofHex;
-    ctx.fillRect(bldg.x - 8, bldg.y + 8, bldg.w + 16, 22);
-    ctx.fillRect(bldg.x + 6, bldg.y - 4, bldg.w - 12, 14);
-    ctx.fillStyle = bldg.trimHex;
-    ctx.fillRect(bldg.x - 8, bldg.y + 28, bldg.w + 16, 3);
-
-    // Ventanas iluminadas cálidas
-    ctx.fillStyle = '#fef08a';
-    ctx.fillRect(bldg.x + 18, bldg.y + 44, 22, 18);
-    ctx.fillRect(bldg.x + bldg.w - 40, bldg.y + 44, 22, 18);
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(bldg.x + 28, bldg.y + 44, 2, 18);
-    ctx.fillRect(bldg.x + bldg.w - 30, bldg.y + 44, 2, 18);
-
-    // Puerta accesible central + felpudo de piedra
-    const dLeft = bldg.doorX - 15;
-    ctx.fillStyle = '#475569';
-    ctx.fillRect(dLeft - 4, bldg.y + bldg.h, 38, 8);
-    ctx.fillStyle = '#090d16';
-    ctx.fillRect(dLeft, bldg.y + bldg.h - 34, 30, 34);
-    ctx.strokeStyle = bldg.trimHex;
-    ctx.strokeRect(dLeft, bldg.y + bldg.h - 34, 30, 34);
-
-    // Rótulo pixelado superior
-    ctx.fillStyle = '#090d16';
-    ctx.fillRect(bldg.doorX - 38, bldg.y + 12, 76, 13);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '700 8px "JetBrains Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(bldg.signText, bldg.doorX, bldg.y + 21);
-    ctx.restore();
-  }
-
-  // Entrada oculta tras la cascada en La Garganta del Invasor
-  if (
-    isWorldBoxVisible(
-      WATERFALL_SECRET_ENTRANCE.x - 32,
-      WATERFALL_SECRET_ENTRANCE.y - 32,
-      64,
-      64,
-      camera.x,
-      camera.y,
-      vw,
-      vh
-    )
-  ) {
-    const discoveredWf =
-      progressState.rpg.discoveredSecretIds.includes('secret-cascada-gruta');
-    ctx.save();
-    ctx.translate(WATERFALL_SECRET_ENTRANCE.x, WATERFALL_SECRET_ENTRANCE.y);
-    ctx.fillStyle = discoveredWf ? 'rgba(8, 12, 28, 0.88)' : 'rgba(14, 165, 233, 0.24)';
-    ctx.fillRect(-16, -24, 32, 28);
-    ctx.strokeStyle = discoveredWf ? '#c084fc' : 'rgba(186, 230, 253, 0.55)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(-16, -24, 32, 28);
-    ctx.restore();
-  }
-
-  // Navío Astral en El Puerto de las Islas Perdidas (Rumbo Isla Neón 1980s)
   if (
     isWorldBoxVisible(
       HARBOR_80S_FERRY.x - 60,
       HARBOR_80S_FERRY.y - 45,
       120,
       90,
-      camera.x,
-      camera.y,
+      camX,
+      camY,
       vw,
       vh
     )
@@ -1608,31 +2182,30 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
       invadersRestored ||
       allUnlocked ||
       progressState.rpg.unlockedIslands.includes('island-80s');
-    const bobFerry = reducedMotion ? 0 : Math.sin(elapsed * 2.4) * 3;
+    const bobFerry = reducedMotion ? 0 : animFrame4 % 2 === 0 ? 0 : 2;
     ctx.save();
-    ctx.translate(HARBOR_80S_FERRY.x, Math.round(HARBOR_80S_FERRY.y + bobFerry));
-    ctx.fillStyle = ferryReady ? '#881337' : '#1e293b';
-    ctx.fillRect(-42, -12, 84, 24);
-    ctx.fillStyle = ferryReady ? '#f43f5e' : '#475569';
+    ctx.translate(Math.round(HARBOR_80S_FERRY.x), Math.round(HARBOR_80S_FERRY.y + bobFerry));
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(-44, -24, 88, 38);
+    ctx.fillStyle = ferryReady ? '#b91c1c' : '#475569';
+    ctx.fillRect(-42, -10, 84, 22);
+    ctx.fillStyle = '#f8f5e6';
     ctx.fillRect(-34, -22, 68, 12);
-    ctx.fillStyle = ferryReady ? '#00f3ff' : '#64748b';
-    ctx.fillRect(-26, -18, 52, 4);
+    ctx.fillStyle = '#070b14';
     ctx.font = '700 8px "JetBrains Mono", monospace';
-    ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
-    ctx.fillText(ferryReady ? 'NAVÍO 1980s' : 'MUELLE SELLADO', 0, 5);
+    ctx.fillText(ferryReady ? 'NAVÍO 80s' : 'MUELLE', 0, -13);
     ctx.restore();
   }
 
-  // Relé Auxiliar averiado / reparado en las Ruinas Sur
   if (
     isWorldBoxVisible(
       BROKEN_RELAY_MECHANISM.x - 24,
       BROKEN_RELAY_MECHANISM.y - 28,
       48,
       48,
-      camera.x,
-      camera.y,
+      camX,
+      camY,
       vw,
       vh
     )
@@ -1641,21 +2214,19 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
       BROKEN_RELAY_MECHANISM.id
     );
     ctx.save();
-    ctx.translate(BROKEN_RELAY_MECHANISM.x, BROKEN_RELAY_MECHANISM.y);
-    ctx.fillStyle = '#1e293b';
+    ctx.translate(Math.round(BROKEN_RELAY_MECHANISM.x), Math.round(BROKEN_RELAY_MECHANISM.y));
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(-16, -24, 32, 32);
+    ctx.fillStyle = '#475569';
     ctx.fillRect(-14, -22, 28, 28);
-    ctx.strokeStyle = repaired ? '#10b981' : '#f97316';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(-14, -22, 28, 28);
-    ctx.fillStyle = repaired ? '#34d399' : Math.sin(elapsed * 10) > 0 ? '#fb923c' : '#7c2d12';
-    ctx.fillRect(-8, -16, 16, 10);
+    ctx.fillStyle = repaired ? '#4ca64c' : animFrame4 % 2 === 0 ? '#f26419' : '#7c2d12';
+    ctx.fillRect(-8, -16, 16, 12);
     ctx.restore();
   }
 
-  // Cofres del tesoro en el exterior de la Isla 70s
   for (const chest of RPG_CHESTS) {
     if (chest.areaId !== 'exterior-70s') continue;
-    if (!isWorldBoxVisible(chest.x - 24, chest.y - 24, 48, 48, camera.x, camera.y, vw, vh)) {
+    if (!isWorldBoxVisible(chest.x - 24, chest.y - 24, 48, 48, camX, camY, vw, vh)) {
       continue;
     }
     const opened = progressState.rpg.openedChestIds.includes(chest.id);
@@ -1670,31 +2241,182 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     );
   }
 
-  // NPCs expresivos de la isla
-  for (const npc of ISLAND_NPCS) {
-    if (!isWorldBoxVisible(npc.x - 20, npc.y - 36, 40, 48, camera.x, camera.y, vw, vh)) continue;
-    const nbob = reducedMotion ? 0 : Math.sin(elapsed * 3.4 + npc.x) * 2;
-    ctx.save();
-    ctx.translate(npc.x, Math.round(npc.y + nbob));
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
-    ctx.beginPath();
-    ctx.ellipse(0, 4, 10, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
+  // 7. CAPAS DE PROFUNDIDAD CON ORDENAMIENTO Y (Y-SORTING)
+  // Permite que Pixel pase detrás de copas de árboles, farolas, tejados y arcos cuando está al norte,
+  // y delante cuando camina al sur de su base.
+  const ySortedDrawables: { sortY: number; draw: () => void }[] = [];
 
-    ctx.fillStyle = npc.palette.secondary;
-    ctx.fillRect(-8, -28, 16, 6);
-    ctx.fillStyle = '#fde2c8';
-    ctx.fillRect(-6, -22, 12, 8);
-    ctx.fillStyle = '#090d16';
-    ctx.fillRect(-4, -20, 2, 2);
-    ctx.fillRect(2, -20, 2, 2);
-    ctx.fillStyle = npc.palette.primary;
-    ctx.fillRect(-8, -14, 16, 13);
-    ctx.restore();
+  for (const tree of ISLAND_TREES) {
+    if (isWorldBoxVisible(tree.x - 32, tree.y - 58, 64, 72, camX, camY, vw, vh)) {
+      ySortedDrawables.push({
+        sortY: tree.y,
+        draw: () => drawHandcraftedTree(ctx, tree.x, tree.y, tree.variant),
+      });
+    }
   }
 
-  // Jugador Pixel con animaciones en 4 direcciones (o montado sobre la Tabla de Pong)
-  if (flight.type === 'pong-to-garganta' || flight.type === 'garganta-to-pong') {
+  for (const lamp of PHOSPHOR_LAMPS) {
+    if (isWorldBoxVisible(lamp.x - 34, lamp.y - 54, 68, 68, camX, camY, vw, vh)) {
+      ySortedDrawables.push({
+        sortY: lamp.y,
+        draw: () =>
+          drawPhosphorStreetlamp(ctx, lamp.x, lamp.y, lamp.color, elapsed, reducedMotion),
+      });
+    }
+  }
+
+  for (const mill of SIGNAL_WINDMILLS) {
+    if (isWorldBoxVisible(mill.x - 28, mill.y - 68, 56, 76, camX, camY, vw, vh)) {
+      ySortedDrawables.push({
+        sortY: mill.y,
+        draw: () => drawSignalWindmill(ctx, mill.x, mill.y, elapsed, reducedMotion),
+      });
+    }
+  }
+
+  if (
+    isWorldBoxVisible(
+      ISLAND_KEY_COORDS.pongCabinet.x - 75,
+      ISLAND_KEY_COORDS.pongCabinet.y - 80,
+      150,
+      120,
+      camX,
+      camY,
+      vw,
+      vh
+    )
+  ) {
+    ySortedDrawables.push({
+      sortY: ISLAND_KEY_COORDS.pongCabinet.y,
+      draw: () =>
+        drawPong1972CabinetWorld(
+          ctx,
+          ISLAND_KEY_COORDS.pongCabinet.x,
+          ISLAND_KEY_COORDS.pongCabinet.y,
+          pongRestored,
+          elapsed
+        ),
+    });
+  }
+
+  if (
+    isWorldBoxVisible(
+      ISLAND_KEY_COORDS.invadersCabinet.x - 80,
+      ISLAND_KEY_COORDS.invadersCabinet.y - 85,
+      160,
+      125,
+      camX,
+      camY,
+      vw,
+      vh
+    )
+  ) {
+    ySortedDrawables.push({
+      sortY: ISLAND_KEY_COORDS.invadersCabinet.y,
+      draw: () =>
+        drawSpaceInvaders1978CabinetWorld(
+          ctx,
+          ISLAND_KEY_COORDS.invadersCabinet.x,
+          ISLAND_KEY_COORDS.invadersCabinet.y,
+          invadersRestored,
+          invadersCabinetUnlocked,
+          elapsed
+        ),
+    });
+  }
+
+  for (const bldg of ISLAND_70S_BUILDINGS) {
+    if (
+      isWorldBoxVisible(
+        bldg.x - 28,
+        bldg.y - 48,
+        bldg.w + 56,
+        bldg.h + 76,
+        camX,
+        camY,
+        vw,
+        vh
+      )
+    ) {
+      ySortedDrawables.push({
+        sortY: bldg.y + bldg.h,
+        draw: () =>
+          drawPixelverseBuilding(
+            ctx,
+            bldg,
+            elapsed,
+            reducedMotion,
+            tmStatus.canTravelTo80s
+          ),
+      });
+    }
+  }
+
+  for (const npc of ISLAND_NPCS) {
+    if (!isWorldBoxVisible(npc.x - 20, npc.y - 36, 40, 48, camX, camY, vw, vh)) continue;
+    ySortedDrawables.push({
+      sortY: npc.y,
+      draw: () => {
+        const nbob = reducedMotion ? 0 : (animFrame4 + Math.floor(npc.x)) % 2 === 0 ? 0 : -2;
+        ctx.save();
+        ctx.translate(Math.round(npc.x), Math.round(npc.y + nbob));
+        ctx.fillStyle = 'rgba(7, 11, 20, 0.45)';
+        ctx.fillRect(-8, 3, 16, 4);
+
+        ctx.fillStyle = '#070b14';
+        ctx.fillRect(-9, -30, 18, 32);
+        ctx.fillStyle = npc.palette.secondary;
+        ctx.fillRect(-8, -29, 16, 7);
+        ctx.fillStyle = '#fde2c8';
+        ctx.fillRect(-7, -22, 14, 8);
+        ctx.fillStyle = '#070b14';
+        ctx.fillRect(-4, -20, 2, 3);
+        ctx.fillRect(2, -20, 2, 3);
+        ctx.fillStyle = npc.palette.primary;
+        ctx.fillRect(-8, -14, 16, 14);
+        ctx.restore();
+      },
+    });
+  }
+
+  // Jugador Pixel integrado en el ordenamiento de profundidad cuando camina en tierra
+  const playerFlyingHover =
+    flight.type === 'pong-to-garganta' || flight.type === 'garganta-to-pong';
+  if (
+    !playerFlyingHover &&
+    (flight.type !== 'shuttle-landing' || flight.elapsed / flight.duration >= 0.72)
+  ) {
+    ySortedDrawables.push({
+      sortY: player.y,
+      draw: () =>
+        drawPixelAvatar4Dir(
+          ctx,
+          player.x,
+          player.y,
+          player.facingDir ?? (player.facing >= 0 ? 'right' : 'left'),
+          player.walking,
+          Boolean(player.sprinting),
+          elapsed,
+          skinColor,
+          hairColor,
+          shirtColor,
+          {
+            reducedMotion,
+            equippedCosmetic: progressState.rpg.equippedCosmetic,
+            lanternActive: progressState.rpg.lanternActive,
+            interactAnim: player.interactAnim,
+          }
+        ),
+    });
+  }
+
+  ySortedDrawables.sort((a, b) => a.sortY - b.sortY);
+  for (const item of ySortedDrawables) {
+    item.draw();
+  }
+
+  // Si Pixel vuela por el aire sobre la Tabla de Pong, se dibuja por encima del dosel
+  if (playerFlyingHover) {
     drawPongHoverboard(
       ctx,
       player.x,
@@ -1707,57 +2429,44 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
       shirtColor,
       reducedMotion
     );
-  } else if (
-    flight.type !== 'shuttle-landing' ||
-    flight.elapsed / flight.duration >= 0.72
-  ) {
-    drawPixelAvatar4Dir(
-      ctx,
-      player.x,
-      player.y,
-      player.facingDir ?? (player.facing >= 0 ? 'right' : 'left'),
-      player.walking,
-      Boolean(player.sprinting),
-      elapsed,
-      skinColor,
-      hairColor,
-      shirtColor,
-      {
-        reducedMotion,
-        equippedCosmetic: progressState.rpg.equippedCosmetic,
-        lanternActive: progressState.rpg.lanternActive,
-        interactAnim: player.interactAnim,
-      }
-    );
   }
 
-  // Onda de pulso del Escáner de Secretos TTL [R]
+  // 8. ONDA DE PULSO DEL SONAR DE FRECUENCIAS TTL [R]
   if (scannerPulse && scannerPulse.active) {
     const pRatio = Math.min(1, scannerPulse.elapsed / 1.45);
-    const radius = 24 + pRatio * 480;
+    const radius = Math.round(24 + pRatio * 480);
     ctx.save();
-    ctx.strokeStyle = `rgba(0, 243, 255, ${(1 - pRatio) * 0.85})`;
+    ctx.strokeStyle = '#00f3ff';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(player.x, player.y - 10, radius, 0, Math.PI * 2);
+    ctx.arc(Math.round(player.x), Math.round(player.y - 10), radius, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Marcar cofres cerrados, entrada tras cascada y grabados cercanos dentro del radio
     const secretTargets: { x: number; y: number; tag: string }[] = [
       {
         x: WATERFALL_SECRET_ENTRANCE.x,
         y: WATERFALL_SECRET_ENTRANCE.y,
-        tag: '¡SECRETO TRAS CASCADA!',
+        tag: '¡GRUTA TRAS CASCADA!',
       },
+      ...ISLAND_ANOMALY_PORTALS.map((ap) => ({
+        x: ap.x,
+        y: ap.y,
+        tag: 'PORTAL ANÓMALO',
+      })),
+      ...COASTAL_SUBTERRANEAN_TUNNELS.map((t) => ({
+        x: t.x,
+        y: t.y,
+        tag: 'TÚNEL EN ROCA',
+      })),
       ...RPG_CHESTS.filter(
         (c) =>
           c.areaId === 'exterior-70s' &&
           !progressState.rpg.openedChestIds.includes(c.id)
-      ).map((c) => ({ x: c.x, y: c.y, tag: 'COFRE DETECTADO' })),
+      ).map((c) => ({ x: c.x, y: c.y, tag: 'COFRE OCULTO' })),
       ...RPG_EXAMINABLES.filter((ex) => ex.areaId === 'exterior-70s').map((ex) => ({
         x: ex.x,
         y: ex.y,
-        tag: 'PISTA ANTIGUA',
+        tag: ex.id.startsWith('exam-simbolo-pulso') ? 'GLIFO DE PULSO' : 'HALLAZGO ARQUEOLÓGICO',
       })),
     ];
 
@@ -1765,54 +2474,44 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     ctx.textAlign = 'center';
     for (const st of secretTargets) {
       if (Math.hypot(st.x - player.x, st.y - player.y) <= radius + 30) {
-        ctx.fillStyle = '#00f3ff';
-        ctx.fillText(`◆ ${st.tag}`, st.x, st.y - 34);
+        ctx.fillStyle = '#070b14';
+        ctx.fillRect(st.x - 66, st.y - 46, 132, 16);
+        ctx.fillStyle = '#f8f5e6';
+        ctx.fillText(`▶ ${st.tag}`, st.x, st.y - 35);
       }
     }
     ctx.restore();
   }
 
-  // Indicador flotante sobre el elemento interactivo cercano
+  // Etiqueta flotante de interacción [E] con marco propio de PIXELVERSE (obsidiana + bronce)
   if (prompt && flight.type === 'none') {
-    const py = prompt.y - 54 + (reducedMotion ? 0 : Math.sin(elapsed * 5) * 3);
+    const py = Math.round(prompt.y - 54 + (animFrame4 % 2 === 0 ? 0 : -2));
+    const px = Math.round(prompt.x);
     ctx.save();
-    ctx.font = '700 11px "JetBrains Mono", monospace';
+    ctx.font = '700 10px "JetBrains Mono", monospace';
     const badgeText = `[E] ${prompt.actionLabel}`;
-    const tw = ctx.measureText(badgeText).width + 18;
-    ctx.fillStyle = 'rgba(4, 9, 24, 0.88)';
-    ctx.fillRect(prompt.x - tw / 2, py - 14, tw, 22);
-    ctx.strokeStyle = prompt.accentHex;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(prompt.x - tw / 2, py - 14, tw, 22);
-    ctx.fillStyle = '#ffffff';
+    const tw = Math.ceil(ctx.measureText(badgeText).width) + 20;
+    const left = Math.round(px - tw / 2);
+
+    ctx.fillStyle = '#050811';
+    ctx.fillRect(left - 2, py - 16, tw + 4, 24);
+    ctx.fillStyle = '#d8be88';
+    ctx.fillRect(left, py - 14, tw, 20);
+    ctx.fillStyle = '#0b1324';
+    ctx.fillRect(left + 2, py - 12, tw - 4, 16);
+    ctx.fillStyle = '#f8f5e6';
     ctx.textAlign = 'center';
-    ctx.fillText(badgeText, prompt.x, py + 1);
+    ctx.fillText(badgeText, px, py);
     ctx.restore();
   }
 
-  // Partículas ambientales (con culling de cámara) y estallidos de recolección
-  for (const b of ambientBits) {
-    const by =
-      (((b.y + (reducedMotion ? 0 : elapsed * b.vy)) % ISLAND_WORLD_H) + ISLAND_WORLD_H) %
-      ISLAND_WORLD_H;
-    const bx = b.x + (reducedMotion ? 0 : Math.sin(elapsed * 1.4 + b.phase) * 18);
-    if (!isWorldBoxVisible(bx, by, 4, 4, camera.x, camera.y, vw, vh, 24)) continue;
-    ctx.fillStyle = b.color;
-    ctx.globalAlpha = 0.55;
-    ctx.fillRect(Math.round(bx), Math.round(by), 3, 3);
-  }
-  ctx.globalAlpha = 1;
-
   for (const pb of pickupBursts) {
-    ctx.globalAlpha = Math.max(0, pb.life / 0.55);
     ctx.fillStyle = pb.color;
-    ctx.fillRect(Math.round(pb.x - 2), Math.round(pb.y - 2), 5, 5);
+    ctx.fillRect(Math.round(pb.x - 2), Math.round(pb.y - 2), 6, 6);
   }
-  ctx.globalAlpha = 1;
 
   ctx.restore();
 
-  // Tinte atmosférico regional según la zona activa
   if (activeZoneId) {
     ctx.fillStyle = ISLAND_ZONES[activeZoneId].ambientTint;
     ctx.fillRect(0, 0, vw, vh);

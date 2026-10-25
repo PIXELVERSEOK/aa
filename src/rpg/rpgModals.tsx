@@ -343,6 +343,63 @@ export function RpgInventoryModal({
           </div>
         </div>
 
+        {/* Logros Especiales Permanentes registrados en la partida */}
+        <div className="pt-3 border-t-2 border-dashed border-white/20 space-y-2">
+          <p className="text-[11px] font-mono tracking-wider text-[#fde047] uppercase font-bold">
+            Logros Permanentes del Cartucho
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+            {[
+              {
+                id: 'pong-pionero-1972',
+                title: 'Pionero 1972 (Pong)',
+                desc: '1.000 PTS alcanzados en Las Praderas del Pixel.',
+                unlocked:
+                  allUnlocked ||
+                  progressState.rpg.achievementsUnlocked.includes('pong-pionero-1972') ||
+                  Boolean(progressState.games['pong']?.memoryUnlocked),
+              },
+              {
+                id: 'invaders-1000-pts',
+                title: 'Defensor 1.000 PTS',
+                desc: '1.000 PTS registrados en Space Invaders (Zona 4).',
+                unlocked:
+                  allUnlocked ||
+                  progressState.rpg.achievementsUnlocked.includes('invaders-1000-pts') ||
+                  Boolean(progressState.games['space-invaders']?.memoryUnlocked),
+              },
+              {
+                id: 'vigas-1981',
+                title: 'Vigas Rojas 1981',
+                desc: 'Gabinete vertical superado en Isla Neón 1980s.',
+                unlocked:
+                  allUnlocked ||
+                  progressState.rpg.achievementsUnlocked.includes('vigas-1981') ||
+                  Boolean(progressState.games['donkey-kong']?.memoryUnlocked),
+              },
+            ].map((ach) => (
+              <div
+                key={ach.id}
+                className={`border px-2.5 py-2 ${
+                  ach.unlocked
+                    ? 'border-[#86efac] bg-[#14532d]/55 text-white'
+                    : 'border-white/10 bg-black/35 text-slate-500'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-bold truncate">{ach.title}</span>
+                  <span className="text-[10px] text-[#fde047]">
+                    {ach.unlocked ? '★ LOGRO' : '---'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-200 mt-0.5 leading-snug">
+                  {ach.unlocked ? ach.desc : 'Supera el hito arcade para registrarlo.'}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="flex items-center justify-between pt-2 border-t border-white/15 font-mono text-xs">
           <span className="text-slate-300">
             Atajos: [I] Inventario · [L] Lámpara · [R] Escáner

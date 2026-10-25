@@ -15,6 +15,7 @@ import {
 } from '../island/island70sRenderer';
 import { PixelverseProgressState } from '../memories/progressionState';
 import {
+  evaluateTimeMachineStatus,
   FacingDirection,
   RPG_CHESTS,
   RPG_EXAMINABLES,
@@ -327,6 +328,157 @@ export function renderSubAreaFrame(params: SubAreaRenderParams): void {
       ctx.fillRect(cx - 13, cy - 40, 26, 3);
       ctx.fillRect(cx - 13, cy - 32, 26, 3);
       ctx.fillRect(cx - 13, cy - 25, 26, 3);
+    } else if (prop.kind === 'temporal-conduit') {
+      const pulse = reducedMotion ? 0.75 : 0.55 + Math.sin(elapsed * 3.6 + prop.x * 0.02) * 0.35;
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(prop.x - 2, prop.y - 2, prop.w + 4, prop.h + 4);
+      ctx.fillStyle = '#1b263b';
+      ctx.fillRect(prop.x, prop.y, prop.w, prop.h);
+      ctx.strokeStyle = '#d8be88';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(prop.x + 2, prop.y + 2, prop.w - 4, prop.h - 4);
+
+      // Núcleo conductor vertical con anillos de latón y pulso cian/violeta
+      ctx.fillStyle = '#09111f';
+      ctx.fillRect(prop.x + 10, prop.y + 8, prop.w - 20, prop.h - 16);
+      ctx.globalAlpha = Math.max(0.25, pulse);
+      ctx.fillStyle = prop.accentHex;
+      ctx.fillRect(prop.x + 14, prop.y + 12, prop.w - 28, prop.h - 24);
+      ctx.globalAlpha = 1;
+
+      ctx.fillStyle = '#d8be88';
+      for (let ry = prop.y + 14; ry < prop.y + prop.h - 12; ry += 14) {
+        ctx.fillRect(prop.x + 6, ry, prop.w - 12, 3);
+      }
+      if (prop.label) {
+        ctx.fillStyle = '#f8f5e6';
+        ctx.font = '700 8px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(prop.label, prop.x + prop.w / 2, prop.y - 6);
+      }
+    } else if (prop.kind === 'time-machine-core') {
+      const tm = evaluateTimeMachineStatus(progressState, allUnlocked);
+      const cx = Math.round(prop.x + prop.w / 2);
+      const cy = Math.round(prop.y + prop.h / 2);
+      const spinSpeed =
+        tm.stageNumber === 4 ? 2.1 : tm.stageNumber === 3 ? 1.15 : tm.stageNumber === 2 ? 0.45 : 0.12;
+      const rot = reducedMotion ? 0.35 : elapsed * spinSpeed;
+
+      // Plataforma circular escalonada de obsidiana y bronce arqueológico
+      ctx.fillStyle = '#050811';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 28, 86, 32, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = tm.canTravelTo80s ? '#00f3ff' : '#d8be88';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#131d31';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 24, 72, 24, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bastidor principal de El Cronoscopio
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(prop.x - 4, prop.y - 4, prop.w + 8, prop.h + 8);
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(prop.x, prop.y, prop.w, prop.h);
+      ctx.strokeStyle = '#d8be88';
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(prop.x + 2, prop.y + 2, prop.w - 4, prop.h - 4);
+
+      // Columnas laterales de bobinas de cobre
+      ctx.fillStyle = '#784820';
+      ctx.fillRect(prop.x + 8, prop.y + 10, 16, prop.h - 20);
+      ctx.fillRect(prop.x + prop.w - 24, prop.y + 10, 16, prop.h - 20);
+      ctx.fillStyle = '#eab308';
+      for (let by = prop.y + 16; by < prop.y + prop.h - 16; by += 12) {
+        ctx.fillRect(prop.x + 6, by, 20, 3);
+        ctx.fillRect(prop.x + prop.w - 26, by, 20, 3);
+      }
+
+      // Cámara central de apertura temporal
+      ctx.fillStyle = '#040814';
+      ctx.beginPath();
+      ctx.arc(cx, cy - 4, 34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = tm.canTravelTo80s ? '#00f3ff' : '#64748b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Anillos astrolábicos contrarrotatorios según etapa (1..4)
+      ctx.save();
+      ctx.translate(cx, cy - 4);
+      ctx.rotate(rot);
+      ctx.strokeStyle = tm.stageNumber >= 2 ? '#d8be88' : '#475569';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-22, -22, 44, 44);
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(cx, cy - 4);
+      ctx.rotate(-rot * 1.35);
+      ctx.strokeStyle = tm.canTravelTo80s
+        ? '#00f3ff'
+        : tm.stageNumber >= 3
+        ? '#38bdf8'
+        : '#334155';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-15, -15, 30, 30);
+      ctx.restore();
+
+      // Vórtice luminoso cuando la Etapa 4 está lista para viajar a 1980s
+      if (tm.canTravelTo80s) {
+        const glowR = reducedMotion ? 13 : 11 + Math.sin(elapsed * 5) * 3;
+        const vGrad = ctx.createRadialGradient(cx, cy - 4, 2, cx, cy - 4, glowR + 10);
+        vGrad.addColorStop(0, '#ffffff');
+        vGrad.addColorStop(0.45, '#00f3ff');
+        vGrad.addColorStop(1, 'rgba(244, 63, 94, 0)');
+        ctx.fillStyle = vGrad;
+        ctx.beginPath();
+        ctx.arc(cx, cy - 4, glowR + 10, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = tm.syncedCount > 0 ? '#38bdf8' : '#334155';
+        ctx.fillRect(cx - 4, cy - 8, 8, 8);
+      }
+
+      // 4 Indicadores reales de subsistemas en el frontal inferior del Cronoscopio
+      const modules = [
+        { ok: tm.pongReady, hex: '#facc15', tag: '72' },
+        { ok: tm.glitchReady, hex: '#00f3ff', tag: 'GL' },
+        { ok: tm.invadersReady, hex: '#39ff14', tag: '78' },
+        { ok: tm.archaeologyReady, hex: '#c084fc', tag: 'ARQ' },
+      ];
+      modules.forEach((mod, idx) => {
+        const mx = prop.x + 28 + idx * 28;
+        const my = prop.y + prop.h - 20;
+        ctx.fillStyle = '#070b14';
+        ctx.fillRect(mx - 1, my - 1, 22, 14);
+        ctx.fillStyle = mod.ok ? mod.hex : '#1e293b';
+        ctx.fillRect(mx, my, 20, 12);
+        ctx.fillStyle = mod.ok ? '#050811' : '#94a3b8';
+        ctx.font = '700 7px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(mod.tag, mx + 10, my + 9);
+      });
+
+      // Placa superior con etapa del Cronoscopio
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(cx - 64, prop.y - 16, 128, 15);
+      ctx.strokeStyle = tm.canTravelTo80s ? '#00f3ff' : '#d8be88';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(cx - 64, prop.y - 16, 128, 15);
+      ctx.fillStyle = tm.canTravelTo80s ? '#fde047' : '#f8f5e6';
+      ctx.font = '700 8px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        tm.canTravelTo80s
+          ? 'CRONOSCOPIO · SALTO 1980s LISTO'
+          : `CRONOSCOPIO · ETAPA ${tm.stageNumber}/4`,
+        cx,
+        prop.y - 6
+      );
     }
     ctx.restore();
   }
