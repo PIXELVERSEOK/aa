@@ -140,7 +140,7 @@ export const ISLAND_ZONES: Record<IslandZoneId, IslandZoneMeta> = {
     numberLabel: 'SECTOR 03 · RUINAS DEL PRIMER PULSO',
     macroRegionTitle: 'LAS RUINAS DEL PRIMER PULSO',
     name: 'Las Ruinas del Primer Pulso',
-    subtitle: 'Estructuras antiguas con glifos digitales, Archivo Pionero e Instalación de la Máquina del Tiempo',
+    subtitle: 'Estructuras antiguas con glifos, Museo Viviente de los 70, Archivo Pionero y el Cronoscopio',
     biome: 'village',
     accentHex: '#f59e0b',
     ambientTint: 'rgba(245, 158, 11, 0.035)',
@@ -257,7 +257,8 @@ export const ISLAND_WALKABLE_RECTS: WalkableRect[] = [
     requiresCondition: 'south-shortcut',
   },
 
-  // SECTOR 03: Las Ruinas del Primer Pulso (Archivo Pionero + Instalación de la Máquina del Tiempo)
+  // SECTOR 03: Las Ruinas del Primer Pulso (Museo Viviente 70s + Archivo Pionero + Instalación de la Máquina del Tiempo)
+  { id: 'ruinas-museo-esplanade', x: 1504, y: 928, w: 288, h: 176, zoneId: 'ruinas-primer-arcade', surface: 'cobble' },
   { id: 'ruinas-plaza', x: 1504, y: 1072, w: 768, h: 528, zoneId: 'ruinas-primer-arcade', surface: 'cobble' },
   { id: 'ruinas-south-terrace', x: 1504, y: 1536, w: 432, h: 192, zoneId: 'ruinas-primer-arcade', surface: 'stone' },
   { id: 'ruinas-to-pong', x: 2176, y: 1376, w: 304, h: 240, zoneId: 'ruinas-primer-arcade', surface: 'grass' },

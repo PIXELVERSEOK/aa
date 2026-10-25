@@ -34,6 +34,7 @@ export interface SavedPlayerOptions {
   hairColor: string;
   shirtColor: string;
   gbGreenMode: boolean;
+  audioMuted?: boolean;
 }
 
 export interface RpgExplorationState {
@@ -43,6 +44,10 @@ export interface RpgExplorationState {
   discoveredSecretIds: string[];
   solvedPuzzleIds: string[];
   repairedMechanismIds: string[];
+  discoveredClueIds: string[];
+  solvedCaseIds: string[];
+  calmedCreatureIds: string[];
+  inspectedExhibitIds: string[];
   questStates: Record<string, 'active' | 'completed'>;
   unlockedIslands: string[];
   lanternActive: boolean;
@@ -93,6 +98,7 @@ const STORAGE_KEY_V2 = 'pixelverse_adventure_progress_v2';
 const LEGACY_STORAGE_KEY_V1 = 'pixelverse_historical_progress_v1';
 
 export const PONG_UNLOCK_SCORE = 1000;
+export const BREAKOUT_UNLOCK_SCORE = 400;
 export const SPACE_INVADERS_UNLOCK_SCORE = 1000;
 
 function createDefaultRecord(id: HistoricalGameId): GameRestorationRecord {
@@ -117,6 +123,10 @@ export function createDefaultRpgState(): RpgExplorationState {
     discoveredSecretIds: [],
     solvedPuzzleIds: [],
     repairedMechanismIds: [],
+    discoveredClueIds: [],
+    solvedCaseIds: [],
+    calmedCreatureIds: [],
+    inspectedExhibitIds: [],
     questStates: {
       'quest-pulso-1972': 'active',
     },
@@ -131,6 +141,7 @@ export function createDefaultRpgState(): RpgExplorationState {
       hairColor: '#331100',
       shirtColor: '#00f3ff',
       gbGreenMode: false,
+      audioMuted: false,
     },
   };
 }
@@ -157,6 +168,7 @@ export function createInitialProgressState(): PixelverseProgressState {
     schemaVersion: 3,
     games: {
       pong: createDefaultRecord('pong'),
+      breakout: createDefaultRecord('breakout'),
       'donkey-kong': createDefaultRecord('donkey-kong'),
       'space-invaders': createDefaultRecord('space-invaders'),
       'glitch-trail': createDefaultRecord('glitch-trail'),
@@ -211,6 +223,7 @@ function deriveCoherentRpgState(
   games: Record<string, GameRestorationRecord>
 ): RpgExplorationState {
   const pongDone = Boolean(games['pong']?.memoryUnlocked);
+  const breakoutDone = Boolean(games['breakout']?.memoryUnlocked);
   const invadersDone = Boolean(games['space-invaders']?.memoryUnlocked);
   const dkDone = Boolean(games['donkey-kong']?.memoryUnlocked);
 
@@ -218,6 +231,9 @@ function deriveCoherentRpgState(
   items.add('item-bitacora-cero');
   if (pongDone) {
     items.add('item-lampara-fosforo');
+  }
+  if (breakoutDone) {
+    items.add('item-prisma-breakout');
   }
   if (invadersDone) {
     items.add('item-pase-astral-80s');
@@ -242,6 +258,10 @@ function deriveCoherentRpgState(
     quests['quest-pulso-1972'] = 'active';
   }
 
+  if (breakoutDone) {
+    quests['quest-muro-1976'] = 'completed';
+  }
+
   if (invadersDone) {
     quests['quest-defensa-1978'] = 'completed';
     if (!quests['quest-despertar-1981']) {
@@ -257,6 +277,12 @@ function deriveCoherentRpgState(
     achievements.add('pong-pionero-1972');
   }
   if (
+    breakoutDone ||
+    (games['breakout']?.bestScore ?? 0) >= BREAKOUT_UNLOCK_SCORE
+  ) {
+    achievements.add('breakout-secreto-1976');
+  }
+  if (
     invadersDone ||
     (games['space-invaders']?.bestScore ?? 0) >= SPACE_INVADERS_UNLOCK_SCORE
   ) {
@@ -264,6 +290,9 @@ function deriveCoherentRpgState(
   }
   if (dkDone) {
     achievements.add('vigas-1981');
+  }
+  if ((rpg.solvedCaseIds || []).length >= 3) {
+    achievements.add('investigador-cronista-70s');
   }
 
   return {
@@ -281,12 +310,16 @@ function deriveCoherentIslandState(
   rpg?: RpgExplorationState
 ): Island70sExplorationState {
   const pongDone = Boolean(games['pong']?.memoryUnlocked);
+  const breakoutDone = Boolean(games['breakout']?.memoryUnlocked);
   const trailDone =
     island.glitchTrailCompleted || Boolean(games['glitch-trail']?.completed);
   const invadersDone = Boolean(games['space-invaders']?.memoryUnlocked);
 
   const unlockedCabinets = new Set<string>(island.unlockedCabinets);
   unlockedCabinets.add('pong');
+  if (breakoutDone || rpg?.discoveredSecretIds.includes('secret-sala-breakout-1976')) {
+    unlockedCabinets.add('breakout');
+  }
   if (trailDone || invadersDone) {
     unlockedCabinets.add('space-invaders');
   }
@@ -402,6 +435,10 @@ export function loadProgressState(): PixelverseProgressState {
             discoveredSecretIds: sanitizeStringArray(rawRpg.discoveredSecretIds),
             solvedPuzzleIds: sanitizeStringArray(rawRpg.solvedPuzzleIds),
             repairedMechanismIds: sanitizeStringArray(rawRpg.repairedMechanismIds),
+            discoveredClueIds: sanitizeStringArray(rawRpg.discoveredClueIds),
+            solvedCaseIds: sanitizeStringArray(rawRpg.solvedCaseIds),
+            calmedCreatureIds: sanitizeStringArray(rawRpg.calmedCreatureIds),
+            inspectedExhibitIds: sanitizeStringArray(rawRpg.inspectedExhibitIds),
             questStates: sanitizeQuestStates(rawRpg.questStates),
             unlockedIslands: sanitizeStringArray(rawRpg.unlockedIslands, ['island-70s']),
             lanternActive: Boolean(rawRpg.lanternActive),
@@ -437,12 +474,14 @@ export function loadProgressState(): PixelverseProgressState {
                         ? rawRpg.savedOptions.shirtColor
                         : '#00f3ff',
                     gbGreenMode: Boolean(rawRpg.savedOptions.gbGreenMode),
+                    audioMuted: Boolean(rawRpg.savedOptions.audioMuted),
                   }
                 : {
                     skinColor: '#ffccaa',
                     hairColor: '#331100',
                     shirtColor: '#00f3ff',
                     gbGreenMode: false,
+                    audioMuted: false,
                   },
           }
         : createDefaultRpgState();
@@ -554,6 +593,8 @@ export function recordGameVictory(
   const qualifiesForMemory =
     gameId === 'space-invaders'
       ? score >= SPACE_INVADERS_UNLOCK_SCORE
+      : gameId === 'breakout'
+      ? score >= BREAKOUT_UNLOCK_SCORE
       : gameId === 'pong'
       ? score >= PONG_UNLOCK_SCORE || score === 3
       : true;
@@ -1034,6 +1075,42 @@ export function recordManualSaveCheckpoint(
   return next;
 }
 
+export function recordManualSave80sCheckpoint(
+  prev: PixelverseProgressState,
+  x: number,
+  y: number
+): PixelverseProgressState {
+  const rx = Math.round(x);
+  const ry = Math.round(y);
+  const iso = new Date().toISOString();
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: {
+      ...prev.rpg,
+      lastSafeArea: 'island-80s',
+      last80sPos: { x: rx, y: ry },
+      lastManualSaveIso: iso,
+    },
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function recordGlobalManualSave(
+  prev: PixelverseProgressState
+): PixelverseProgressState {
+  const iso = new Date().toISOString();
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: {
+      ...prev.rpg,
+      lastManualSaveIso: iso,
+    },
+  };
+  saveProgressState(next);
+  return next;
+}
+
 export function savePlayerOptions(
   prev: PixelverseProgressState,
   opts: Partial<SavedPlayerOptions>
@@ -1046,7 +1123,8 @@ export function savePlayerOptions(
     merged.skinColor === prev.rpg.savedOptions.skinColor &&
     merged.hairColor === prev.rpg.savedOptions.hairColor &&
     merged.shirtColor === prev.rpg.savedOptions.shirtColor &&
-    merged.gbGreenMode === prev.rpg.savedOptions.gbGreenMode
+    merged.gbGreenMode === prev.rpg.savedOptions.gbGreenMode &&
+    Boolean(merged.audioMuted) === Boolean(prev.rpg.savedOptions.audioMuted)
   ) {
     return prev;
   }
@@ -1060,5 +1138,84 @@ export function savePlayerOptions(
   saveProgressState(next);
   return next;
 }
+
+export function discoverInvestigationClue(
+  prev: PixelverseProgressState,
+  clueId: string
+): PixelverseProgressState {
+  if (prev.rpg.discoveredClueIds.includes(clueId)) return prev;
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: {
+      ...prev.rpg,
+      discoveredClueIds: [...prev.rpg.discoveredClueIds, clueId],
+    },
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function solveInvestigationCase(
+  prev: PixelverseProgressState,
+  caseId: string,
+  rewardItemIds: string[] = []
+): PixelverseProgressState {
+  if (prev.rpg.solvedCaseIds.includes(caseId)) return prev;
+  const nextRpg = deriveCoherentRpgState(
+    {
+      ...prev.rpg,
+      solvedCaseIds: [...prev.rpg.solvedCaseIds, caseId],
+      inventoryItems: Array.from(new Set([...prev.rpg.inventoryItems, ...rewardItemIds])),
+    },
+    prev.games
+  );
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: nextRpg,
+    island70s: deriveCoherentIslandState(prev.island70s, prev.games, nextRpg),
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function calmGuardianCreature(
+  prev: PixelverseProgressState,
+  creatureId: string,
+  rewardItemIds: string[] = []
+): PixelverseProgressState {
+  if (prev.rpg.calmedCreatureIds.includes(creatureId)) return prev;
+  const nextRpg = deriveCoherentRpgState(
+    {
+      ...prev.rpg,
+      calmedCreatureIds: [...prev.rpg.calmedCreatureIds, creatureId],
+      inventoryItems: Array.from(new Set([...prev.rpg.inventoryItems, ...rewardItemIds])),
+    },
+    prev.games
+  );
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: nextRpg,
+    island70s: deriveCoherentIslandState(prev.island70s, prev.games, nextRpg),
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function recordMuseumExhibitInspected(
+  prev: PixelverseProgressState,
+  exhibitId: string
+): PixelverseProgressState {
+  if (prev.rpg.inspectedExhibitIds.includes(exhibitId)) return prev;
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: {
+      ...prev.rpg,
+      inspectedExhibitIds: [...prev.rpg.inspectedExhibitIds, exhibitId],
+    },
+  };
+  saveProgressState(next);
+  return next;
+}
+
 
 

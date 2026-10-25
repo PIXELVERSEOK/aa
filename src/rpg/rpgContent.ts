@@ -21,6 +21,9 @@ export type RpgAreaId =
   | 'interior-taller-alcorn'
   | 'secret-camara-osciloscopio'
   | 'interior-templo-pioneros'
+  | 'interior-museo-viviente'
+  | 'dungeon-laberinto-origen'
+  | 'secret-sala-breakout'
   | 'interior-cronoscopio'
   | 'chamber-boveda-cronoscopio'
   | 'cave-gruta-cascada'
@@ -75,7 +78,12 @@ export interface ExteriorBuildingSpec {
   id: string;
   name: string;
   subtitle: string;
-  archStyle?: 'cottage-archive' | 'forest-workshop' | 'ruins-sanctuary' | 'chrono-dome';
+  archStyle?:
+    | 'cottage-archive'
+    | 'forest-workshop'
+    | 'ruins-sanctuary'
+    | 'chrono-dome'
+    | 'museum-hall';
   x: number;
   y: number;
   w: number;
@@ -163,6 +171,7 @@ export interface RpgExaminableSpec {
   paragraphs: string[];
   hint?: string;
   secretIdToDiscover?: string;
+  clueIdToDiscover?: string;
   isFalseWall?: boolean;
   unlocksDoorToArea?: {
     targetArea: RpgAreaId;
@@ -236,13 +245,19 @@ export interface SubAreaSpec {
       | 'dk-cabinet-1981'
       | 'astral-ferry'
       | 'time-machine-core'
-      | 'temporal-conduit';
+      | 'temporal-conduit'
+      | 'museum-pedestal'
+      | 'labyrinth-wall'
+      | 'rgb-frequency-pillar'
+      | 'breakout-cabinet-1976'
+      | 'vector-projector';
     x: number;
     y: number;
     w: number;
     h: number;
     accentHex: string;
     label?: string;
+    exhibitId?: string;
   }[];
 }
 
@@ -433,6 +448,42 @@ export const RPG_ITEMS: Record<string, RpgItemSpec> = {
     usageHint: 'Acredita tu avance hacia las nuevas décadas de PIXELVERSE.',
     usableAction: 'inspect',
   },
+  'item-prisma-breakout': {
+    id: 'item-prisma-breakout',
+    name: 'Prisma Cromático TTL (1976)',
+    category: 'reliquia',
+    categoryLabel: 'MEMORIA SECRETA 1976',
+    accentHex: '#f97316',
+    shortCode: 'BRK-76',
+    description:
+      'Cristal de cuatro bandas luminosas obtenido al restaurar Breakout (1976) en la Sala Secreta bajo el Laberinto de Señales. Activa su vitrina en el Museo Viviente.',
+    usageHint: 'Visita el Museo Viviente de los 70 para admirar el pedestal de 1976 encendido.',
+    usableAction: 'inspect',
+  },
+  'item-filtro-interdecada': {
+    id: 'item-filtro-interdecada',
+    name: 'Lámina de Celofán Ámbar-Cian',
+    category: 'pieza-arcade',
+    categoryLabel: 'RELIQUIA DE INVESTIGACIÓN',
+    accentHex: '#22d3ee',
+    shortCode: 'CEL-76',
+    description:
+      'Lámina óptica original empleada sobre monitores CRT monocromos para simular franjas de color. Obtenida al resolver el Caso de Investigación de 1976.',
+    usageHint: 'Conservada en tu archivo arqueológico como prueba de maestría histórica.',
+    usableAction: 'inspect',
+  },
+  'item-lente-vectorial-79': {
+    id: 'item-lente-vectorial-79',
+    name: 'Lente Vectorial QuadraScan (1979)',
+    category: 'reliquia',
+    categoryLabel: 'ARTEFACTO DEL MUSEO',
+    accentHex: '#a78bfa',
+    shortCode: 'VEC-79',
+    description:
+      'Óptica de deflexión magnética XY que traza líneas puras de luz para Lunar Lander y Asteroids (1979). Obtenida al alinear el proyector del Museo Viviente.',
+    usageHint: 'Sincroniza la galería norte del Museo Viviente de los 70.',
+    usableAction: 'inspect',
+  },
 };
 
 /* ============================================================================
@@ -603,6 +654,64 @@ export const RPG_QUESTS: RpgQuestSpec[] = [
     rewardSummary: 'Viaje Temporal 1980s + Emblema de las Vigas Rojas (1981)',
     rewardItemIds: ['item-insignia-vigas-1981'],
   },
+  {
+    id: 'quest-muro-1976',
+    code: 'MIS-07',
+    title: 'El Laberinto Oculto y el Muro de 1976',
+    giverName: 'Curadora Sélene · Museo Viviente de los 70',
+    decadeTag: 'SECRETO JUGABLE · BREAKOUT (1976)',
+    accentHex: '#f97316',
+    summary:
+      'Investiga el pedestal cifrado del Museo Viviente, localiza la Escotilla Subterránea al norte de las Praderas de Pong, supera el Laberinto de Señales y restaura Breakout (1976).',
+    steps: [
+      {
+        label: 'Visitar el Museo Viviente de los 70 en Las Ruinas del Primer Pulso',
+        isDone: (st, all) =>
+          all ||
+          st.rpg.inspectedExhibitIds.length > 0 ||
+          st.island70s.talkedNpcIds.includes('npc-curadora-selene'),
+      },
+      {
+        label: 'Resolver el acertijo cromático RGB del Laberinto de Señales',
+        isDone: (st, all) =>
+          all ||
+          st.rpg.solvedPuzzleIds.includes('puzzle-laberinto-rgb-1976') ||
+          Boolean(st.games['breakout']?.memoryUnlocked),
+      },
+      {
+        label: 'Alcanzar 400 PTS en Breakout (1976) dentro de la Sala Secreta',
+        isDone: (st, all) => all || Boolean(st.games['breakout']?.memoryUnlocked),
+      },
+    ],
+    rewardSummary: 'Hito Jugable Breakout (1976) + Prisma Cromático TTL',
+    rewardItemIds: ['item-prisma-breakout'],
+  },
+  {
+    id: 'quest-casos-origen',
+    code: 'MIS-08',
+    title: 'Crónicas de Investigación de los Setenta',
+    giverName: 'Sabio Orfeo & Curadora Sélene',
+    decadeTag: 'MISTERIO · ARQUEOLOGÍA DIGITAL',
+    accentHex: '#22d3ee',
+    summary:
+      'Examina placas del museo, estelas antiguas y guardianes luminosos para reunir pistas verificables y deducir los tres misterios históricos en tu Diario [Q].',
+    steps: [
+      {
+        label: 'Reunir al menos 3 pistas arqueológicas en la Isla del Origen',
+        isDone: (st, all) => all || st.rpg.discoveredClueIds.length >= 3,
+      },
+      {
+        label: 'Resolver un Caso de Investigación mediante deducción en el Diario [Q]',
+        isDone: (st, all) => all || st.rpg.solvedCaseIds.length >= 1,
+      },
+      {
+        label: 'Completar los 3 Casos de Investigación de la década de 1970',
+        isDone: (st, all) => all || st.rpg.solvedCaseIds.length >= 3,
+      },
+    ],
+    rewardSummary: 'Logro Cronista de los 70 + Lámina de Celofán y Lente Vectorial',
+    rewardItemIds: ['item-filtro-interdecada'],
+  },
 ];
 
 /* ============================================================================
@@ -696,6 +805,28 @@ export const ISLAND_70S_BUILDINGS: ExteriorBuildingSpec[] = [
     targetSpawnY: 468,
     returnExteriorX: 2150,
     returnExteriorY: 1216,
+  },
+  {
+    id: 'bldg-museo-viviente',
+    name: 'Museo Viviente de los 70 · Galería del Origen',
+    subtitle: 'Ruinas del Primer Pulso · Exhibiciones históricas (1971–1979), pedestales interactivos y proyector vectorial',
+    archStyle: 'museum-hall',
+    x: 1548,
+    y: 944,
+    w: 184,
+    h: 92,
+    roofHex: '#1e293b',
+    roofShadeHex: '#0f172a',
+    wallHex: '#e2e8f0',
+    trimHex: '#22d3ee',
+    signText: 'MUSEO 1970s',
+    doorX: 1640,
+    doorY: 1038,
+    targetArea: 'interior-museo-viviente',
+    targetSpawnX: 490,
+    targetSpawnY: 496,
+    returnExteriorX: 1640,
+    returnExteriorY: 1068,
   },
 ];
 
@@ -873,8 +1004,9 @@ export const ISLAND_WOODEN_SIGNS: WoodenSignSpec[] = [
     y: 1360,
     zoneTitle: 'CRUCE CENTRAL DE LA ISLA DEL ORIGEN',
     lines: [
+      '↖ NOROESTE: Museo Viviente de los 70 (Galería de 1971 a 1979 y Proyector Vectorial).',
       '↘ SURESTE: Las Praderas del Pixel y acceso a PONG (1972).',
-      '▲ NORTE: Paso de Montaña y La Fortaleza Volcánica — SPACE INVADERS (1978).',
+      '▲ NORTE: Paso de Montaña, Observatorio del Cronoscopio y Fortaleza de SPACE INVADERS (1978).',
       '▼ SUR: Mecanismo del Puente Costero (atajo de regreso al Pueblo).',
     ],
   },
@@ -885,8 +1017,8 @@ export const ISLAND_WOODEN_SIGNS: WoodenSignSpec[] = [
     y: 1552,
     zoneTitle: 'ZONA 2 — LAS PRADERAS DEL PIXEL',
     lines: [
-      '▶ ESTE: Claro del Primer Arcade — Gabinete clásico de PONG.',
-      '▲ NORTE: Pradera alta de flores silvestres.',
+      '▶ ESTE: Claro del Primer Arcade — Gabinete clásico de PONG (1972).',
+      '▲ NORTE: Pradera alta y Escotilla Cifrada hacia el Laberinto Subterráneo de 1976.',
       '↘ SURESTE: Terraza costera escondida tras los arbustos.',
     ],
   },
@@ -1085,6 +1217,25 @@ export const RPG_CHESTS: RpgChestSpec[] = [
     accentHex: '#f43f5e',
     rewardItemIds: ['item-visor-vectorial'],
     requiresItemId: 'item-llave-binaria',
+  },
+  {
+    id: 'chest-museo-vectorial',
+    areaId: 'interior-museo-viviente',
+    label: 'Vitrinario Vectorial XY (1979)',
+    x: 490,
+    y: 242,
+    accentHex: '#a78bfa',
+    rewardItemIds: ['item-lente-vectorial-79'],
+    requiresPuzzleId: 'puzzle-museo-vector-79',
+  },
+  {
+    id: 'chest-sala-breakout',
+    areaId: 'secret-sala-breakout',
+    label: 'Arca Prototipo de Cuatro Noches (1976)',
+    x: 590,
+    y: 205,
+    accentHex: '#f97316',
+    rewardItemIds: ['item-llave-binaria'],
   },
 ];
 
@@ -1309,6 +1460,69 @@ export const RPG_EXAMINABLES: RpgExaminableSpec[] = [
     ],
     hint: 'Usa la Llave Antigua de 8 Pines para abrir el cofre del callejón noreste.',
   },
+  {
+    id: 'exam-bitacora-sunnyvale',
+    areaId: 'interior-centro-historia',
+    label: 'Recorte de Prensa · El Misterio de Sunnyvale (1972)',
+    actionLabel: 'Examinar Crónica',
+    x: 360,
+    y: 162,
+    accentHex: '#38bdf8',
+    category: 'PISTA ARQUEOLÓGICA · CASO 01',
+    paragraphs: [
+      '«Dos días después de instalar la cabina prototipo de Pong en la taberna Andy Capp’s de Sunnyvale, el dueño llamó de madrugada asegurando que la máquina se había averiado y rechazaba monedas.»',
+      '«Allan Alcorn acudió con sus herramientas esperando un cortocircuito en los chips TTL, pero al abrir la puerta inferior descubrió una sorpresa histórica: una caja metálica de leche rebosando cuartos de dólar.»',
+    ],
+    hint: 'Pista registrada en tu Diario [Q] para el Caso 01.',
+    clueIdToDiscover: 'clue-sunnyvale-monedas',
+  },
+  {
+    id: 'exam-nota-celofan-taller',
+    areaId: 'interior-taller-alcorn',
+    label: 'Cuaderno de Ingeniería · Bandas Cromáticas CRT',
+    actionLabel: 'Leer Apunte Técnico',
+    x: 435,
+    y: 175,
+    accentHex: '#f97316',
+    category: 'PISTA ARQUEOLÓGICA · CASO 02',
+    paragraphs: [
+      '«En 1976 la memoria de color aún resultaba prohibitiva para un salón recreativo. La solución fue tan ingeniosa como artesanal: adherir cuatro tiras de celofán translúcido directamente sobre el cristal monocromo.»',
+      '«Desde la base hacia la cúspide del muro, el haz blanco atravesaba amarillo (1 punto), verde (3 puntos), naranja (5 puntos) y rojo en lo más alto (7 puntos), mientras Steve Wozniak reducía la lógica a menos de cincuenta chips TTL.»',
+    ],
+    hint: 'Recuerda el orden ascendente del muro: Amarillo → Verde → Naranja → Rojo.',
+    clueIdToDiscover: 'clue-celofan-wozniak',
+  },
+  {
+    id: 'exam-estela-laberinto-76',
+    areaId: 'dungeon-laberinto-origen',
+    label: 'Placa de Sincronía · Cerradura del Muro 1976',
+    actionLabel: 'Descifrar Secuencia',
+    x: 205,
+    y: 185,
+    accentHex: '#f97316',
+    category: 'LABERINTO DE SEÑALES · PISTA DE PILARES RGB',
+    paragraphs: [
+      '«Cuatro frecuencias custodian la cámara del prototipo oculto. Sintoniza los pilares en el mismo orden en que una esfera asciende perforando el muro de 1976: desde la franja inferior de menor valor hasta la cima carmesí.»',
+    ],
+    hint: 'Orden de impacto ascendente: 1º Amarillo · 2º Verde · 3º Naranja · 4º Rojo.',
+    clueIdToDiscover: 'clue-secuencia-laberinto',
+  },
+  {
+    id: 'exam-bitacora-wozniak-76',
+    areaId: 'secret-sala-breakout',
+    label: 'Esquemático Original · Las Cuatro Noches de 1976',
+    actionLabel: 'Inspeccionar Plano',
+    x: 205,
+    y: 215,
+    accentHex: '#22d3ee',
+    category: 'SALA SECRETA 1976 · MEMORIA PROFUNDA',
+    paragraphs: [
+      'Un plano azulado muestra trazos de circuitos integrados TTL meticulosamente entrelazados: «Cuatro noches sin descanso bastaron para demostrar que la elegancia electrónica podía esculpir un clásico inmortal».',
+      'Al jugar y superar 400 puntos en el gabinete central, la vitrina cifrada del Museo Viviente de los 70 despertará para siempre.',
+    ],
+    secretIdToDiscover: 'secret-sala-breakout-1976',
+    clueIdToDiscover: 'clue-wozniak-ttl',
+  },
 ];
 
 /* ============================================================================
@@ -1380,6 +1594,17 @@ export const RPG_SUBAREA_NPCS: RpgSubAreaNpcSpec[] = [
     facing: 'down',
     palette: { primary: '#e11d48', secondary: '#5cc8ff', glow: '#fb7185' },
     pitch: 1.05,
+  },
+  {
+    id: 'npc-curadora-selene',
+    areaId: 'interior-museo-viviente',
+    name: 'Curadora Sélene',
+    role: 'Directora del Museo Viviente de los 70',
+    x: 490,
+    y: 365,
+    facing: 'down',
+    palette: { primary: '#0891b2', secondary: '#fde047', glow: '#22d3ee' },
+    pitch: 1.08,
   },
 ];
 
@@ -1854,12 +2079,658 @@ export const SUB_AREAS: Record<Exclude<RpgAreaId, 'exterior-70s'>, SubAreaSpec> 
       },
     ],
   },
+
+  'interior-museo-viviente': {
+    id: 'interior-museo-viviente',
+    numberLabel: 'MUSEO INTERACTIVO · DÉCADA DE 1970',
+    name: 'Museo Viviente de los 70 · Galería del Origen',
+    subtitle: 'Hitos jugables y exhibiciones documentadas (1971–1979) que se iluminan conforme restauras la memoria',
+    accentHex: '#22d3ee',
+    floorHex: '#111b2e',
+    floorGridHex: 'rgba(34, 211, 238, 0.09)',
+    wallHex: '#070d19',
+    borderHex: '#22d3ee',
+    width: 980,
+    height: 580,
+    walkableBounds: { x: 76, y: 118, w: 828, h: 416 },
+    obstacles: [
+      { id: 'mus-ped-1', x: 133, y: 175, w: 64, h: 46 },
+      { id: 'mus-ped-2', x: 283, y: 175, w: 64, h: 46 },
+      { id: 'mus-ped-3', x: 133, y: 315, w: 64, h: 46 },
+      { id: 'mus-ped-4', x: 283, y: 315, w: 64, h: 46 },
+      { id: 'mus-ped-5', x: 633, y: 175, w: 64, h: 46 },
+      { id: 'mus-ped-6', x: 783, y: 175, w: 64, h: 46 },
+      { id: 'mus-ped-7', x: 633, y: 315, w: 64, h: 46 },
+      { id: 'mus-ped-8', x: 783, y: 315, w: 64, h: 46 },
+      { id: 'mus-vec-proj', x: 446, y: 144, w: 88, h: 46 },
+    ],
+    exits: [
+      {
+        id: 'exit-museo-outside',
+        label: 'Puerta Principal · Las Ruinas del Primer Pulso',
+        actionLabel: 'Salir a la Explanada',
+        x: 490,
+        y: 524,
+        accentHex: '#22d3ee',
+        targetArea: 'exterior-70s',
+        returnToSavedExterior: true,
+      },
+    ],
+    decorProps: [
+      {
+        kind: 'vector-projector',
+        x: 446,
+        y: 144,
+        w: 88,
+        h: 46,
+        accentHex: '#a78bfa',
+        label: 'PROYECTOR XY 79',
+      },
+      {
+        kind: 'museum-pedestal',
+        x: 133,
+        y: 175,
+        w: 64,
+        h: 46,
+        accentHex: '#38bdf8',
+        label: '1971 COMP. SPACE',
+        exhibitId: 'exhibit-computer-space-1971',
+      },
+      {
+        kind: 'museum-pedestal',
+        x: 283,
+        y: 175,
+        w: 64,
+        h: 46,
+        accentHex: '#f59e0b',
+        label: '1972 ODYSSEY',
+        exhibitId: 'exhibit-odyssey-1972',
+      },
+      {
+        kind: 'museum-pedestal',
+        x: 133,
+        y: 315,
+        w: 64,
+        h: 46,
+        accentHex: '#00f3ff',
+        label: '1972 PONG [JUG]',
+        exhibitId: 'exhibit-pong-1972',
+      },
+      {
+        kind: 'museum-pedestal',
+        x: 283,
+        y: 315,
+        w: 64,
+        h: 46,
+        accentHex: '#eab308',
+        label: '1974 GRAN TRAK',
+        exhibitId: 'exhibit-gran-trak-1974',
+      },
+      {
+        kind: 'museum-pedestal',
+        x: 633,
+        y: 175,
+        w: 64,
+        h: 46,
+        accentHex: '#f97316',
+        label: '1976 BREAKOUT',
+        exhibitId: 'exhibit-breakout-1976',
+      },
+      {
+        kind: 'museum-pedestal',
+        x: 783,
+        y: 175,
+        w: 64,
+        h: 46,
+        accentHex: '#39ff14',
+        label: '1978 INVADERS',
+        exhibitId: 'exhibit-space-invaders-1978',
+      },
+      {
+        kind: 'museum-pedestal',
+        x: 633,
+        y: 315,
+        w: 64,
+        h: 46,
+        accentHex: '#a78bfa',
+        label: '1979 LUNAR L.',
+        exhibitId: 'exhibit-lunar-lander-1979',
+      },
+      {
+        kind: 'museum-pedestal',
+        x: 783,
+        y: 315,
+        w: 64,
+        h: 46,
+        accentHex: '#22d3ee',
+        label: '1979 ASTEROIDS',
+        exhibitId: 'exhibit-asteroids-1979',
+      },
+    ],
+  },
+
+  'dungeon-laberinto-origen': {
+    id: 'dungeon-laberinto-origen',
+    numberLabel: 'MAZMORRA SUBTERRÁNEA · 1976',
+    name: 'Laberinto de Señales Cromáticas',
+    subtitle: 'Corredores TTL bajo las Praderas · Usa la Lámpara [L], armoniza a Sincro-76 y resuelve los 4 pilares RGB',
+    accentHex: '#f97316',
+    floorHex: '#131629',
+    floorGridHex: 'rgba(249, 115, 22, 0.1)',
+    wallHex: '#060813',
+    borderHex: '#f97316',
+    width: 920,
+    height: 560,
+    walkableBounds: { x: 76, y: 112, w: 768, h: 396 },
+    isDarkCave: true,
+    obstacles: [
+      { id: 'lab-wall-1', x: 256, y: 216, w: 32, h: 292 },
+      { id: 'lab-wall-2', x: 424, y: 112, w: 32, h: 148 },
+      { id: 'lab-wall-3', x: 424, y: 348, w: 32, h: 160 },
+      { id: 'lab-wall-4', x: 604, y: 212, w: 32, h: 204 },
+    ],
+    exits: [
+      {
+        id: 'exit-laberinto-surface',
+        label: 'Escotilla Superior · Regreso a las Praderas de Pong',
+        actionLabel: 'Subir a las Praderas',
+        x: 150,
+        y: 486,
+        accentHex: '#8cd96c',
+        targetArea: 'exterior-70s',
+        targetX: 2704,
+        targetY: 1368,
+      },
+    ],
+    decorProps: [
+      {
+        kind: 'labyrinth-wall',
+        x: 256,
+        y: 216,
+        w: 32,
+        h: 292,
+        accentHex: '#38bdf8',
+      },
+      {
+        kind: 'labyrinth-wall',
+        x: 424,
+        y: 112,
+        w: 32,
+        h: 148,
+        accentHex: '#f97316',
+      },
+      {
+        kind: 'labyrinth-wall',
+        x: 424,
+        y: 348,
+        w: 32,
+        h: 160,
+        accentHex: '#f97316',
+      },
+      {
+        kind: 'labyrinth-wall',
+        x: 604,
+        y: 212,
+        w: 32,
+        h: 204,
+        accentHex: '#22c55e',
+      },
+      {
+        kind: 'rgb-frequency-pillar',
+        x: 326,
+        y: 424,
+        w: 36,
+        h: 44,
+        accentHex: '#facc15',
+        label: 'BANDA AMARILLA',
+      },
+      {
+        kind: 'rgb-frequency-pillar',
+        x: 512,
+        y: 152,
+        w: 36,
+        h: 44,
+        accentHex: '#ef4444',
+        label: 'BANDA ROJA',
+      },
+      {
+        kind: 'rgb-frequency-pillar',
+        x: 512,
+        y: 424,
+        w: 36,
+        h: 44,
+        accentHex: '#22c55e',
+        label: 'BANDA VERDE',
+      },
+      {
+        kind: 'rgb-frequency-pillar',
+        x: 716,
+        y: 424,
+        w: 36,
+        h: 44,
+        accentHex: '#f97316',
+        label: 'BANDA NARANJA',
+      },
+    ],
+  },
+
+  'secret-sala-breakout': {
+    id: 'secret-sala-breakout',
+    numberLabel: 'CÁMARA SECRETA · MAYO DE 1976',
+    name: 'Sala Secreta de Breakout (1976)',
+    subtitle: 'Bóveda subterránea donde reposa el prototipo jugable de cuatro bandas cromáticas',
+    accentHex: '#f97316',
+    floorHex: '#161124',
+    floorGridHex: 'rgba(249, 115, 22, 0.12)',
+    wallHex: '#070510',
+    borderHex: '#22d3ee',
+    width: 760,
+    height: 480,
+    walkableBounds: { x: 112, y: 118, w: 536, h: 326 },
+    obstacles: [
+      { id: 'breakout-cab-obs', x: 344, y: 162, w: 72, h: 58 },
+    ],
+    exits: [
+      {
+        id: 'exit-breakout-to-labyrinth',
+        label: 'Compuerta Sur · Regreso al Laberinto de Señales',
+        actionLabel: 'Volver al Laberinto',
+        x: 380,
+        y: 432,
+        accentHex: '#22d3ee',
+        targetArea: 'dungeon-laberinto-origen',
+        targetX: 748,
+        targetY: 192,
+      },
+    ],
+    decorProps: [
+      {
+        kind: 'breakout-cabinet-1976',
+        x: 344,
+        y: 162,
+        w: 72,
+        h: 68,
+        accentHex: '#f97316',
+        label: 'BREAKOUT 1976',
+      },
+      {
+        kind: 'temporal-conduit',
+        x: 152,
+        y: 152,
+        w: 84,
+        h: 44,
+        accentHex: '#ef4444',
+        label: 'TTL-44 CHIPS',
+      },
+      {
+        kind: 'temporal-conduit',
+        x: 524,
+        y: 152,
+        w: 84,
+        h: 44,
+        accentHex: '#22d3ee',
+        label: 'CELOFÁN RGB',
+      },
+    ],
+  },
 };
 
 export const DK_CABINET_80S_INTERACT = {
   x: 740,
   y: 312,
 };
+
+export const LABYRINTH_1976_ENTRANCE = {
+  id: 'hatch-laberinto-1976',
+  label: 'Escotilla Subterránea Cifrada · Sector 1976',
+  x: 2704,
+  y: 1336,
+  targetArea: 'dungeon-laberinto-origen' as RpgAreaId,
+  targetSpawnX: 150,
+  targetSpawnY: 446,
+  returnExteriorX: 2704,
+  returnExteriorY: 1368,
+};
+
+export const LABYRINTH_SECRET_DOOR = {
+  id: 'door-to-sala-breakout',
+  label: 'Compuerta Sellada · Sala Secreta de 1976',
+  x: 748,
+  y: 148,
+  puzzleId: 'puzzle-laberinto-rgb-1976',
+  targetArea: 'secret-sala-breakout' as RpgAreaId,
+  targetSpawnX: 380,
+  targetSpawnY: 396,
+};
+
+export const BREAKOUT_CABINET_INTERACT = {
+  x: 380,
+  y: 236,
+};
+
+export interface RgbFrequencyPillarSpec {
+  id: string;
+  stepOrder: 1 | 2 | 3 | 4; // 1 Amarillo -> 2 Verde -> 3 Naranja -> 4 Rojo
+  bandName: string;
+  pointsHint: string;
+  x: number;
+  y: number;
+  colorHex: string;
+}
+
+export const LABYRINTH_RGB_PILLARS: RgbFrequencyPillarSpec[] = [
+  {
+    id: 'pillar-yellow',
+    stepOrder: 1,
+    bandName: 'Pilar Amarillo (Franja Inferior · 1 pto)',
+    pointsHint: 'Franja 1 · Base Amarilla',
+    x: 344,
+    y: 446,
+    colorHex: '#facc15',
+  },
+  {
+    id: 'pillar-green',
+    stepOrder: 2,
+    bandName: 'Pilar Verde (Franja Media-Baja · 3 pts)',
+    pointsHint: 'Franja 2 · Capa Verde',
+    x: 530,
+    y: 446,
+    colorHex: '#22c55e',
+  },
+  {
+    id: 'pillar-orange',
+    stepOrder: 3,
+    bandName: 'Pilar Naranja (Franja Media-Alta · 5 pts)',
+    pointsHint: 'Franja 3 · Capa Naranja',
+    x: 734,
+    y: 446,
+    colorHex: '#f97316',
+  },
+  {
+    id: 'pillar-red',
+    stepOrder: 4,
+    bandName: 'Pilar Rojo (Cúspide del Muro · 7 pts)',
+    pointsHint: 'Franja 4 · Cúspide Roja',
+    x: 530,
+    y: 174,
+    colorHex: '#ef4444',
+  },
+];
+
+export const MUSEUM_VECTOR_CONSOLE = {
+  id: 'console-vector-79',
+  puzzleId: 'puzzle-museo-vector-79',
+  label: 'Proyector Vectorial QuadraScan XY (1979)',
+  x: 490,
+  y: 198,
+  targetAngles: [45, 90, 180] as [number, number, number],
+};
+
+export interface MuseumPedestalPlacement {
+  exhibitId: string;
+  x: number;
+  y: number;
+}
+
+export const MUSEUM_PEDESTAL_SPOTS: MuseumPedestalPlacement[] = [
+  { exhibitId: 'exhibit-computer-space-1971', x: 165, y: 224 },
+  { exhibitId: 'exhibit-odyssey-1972', x: 315, y: 224 },
+  { exhibitId: 'exhibit-pong-1972', x: 165, y: 364 },
+  { exhibitId: 'exhibit-gran-trak-1974', x: 315, y: 364 },
+  { exhibitId: 'exhibit-breakout-1976', x: 665, y: 224 },
+  { exhibitId: 'exhibit-space-invaders-1978', x: 815, y: 224 },
+  { exhibitId: 'exhibit-lunar-lander-1979', x: 665, y: 364 },
+  { exhibitId: 'exhibit-asteroids-1979', x: 815, y: 364 },
+];
+
+export interface GuardianCreatureSpec {
+  id: string;
+  name: string;
+  speciesLabel: string;
+  areaId: RpgAreaId;
+  x: number;
+  y: number;
+  accentHex: string;
+  secondaryHex: string;
+  blocksPassageRect?: SolidObstacleRect;
+  requiresLanternOrScanner: boolean;
+  dormantPrompt: string;
+  calmedMessage: string;
+  clueIdGranted?: string;
+}
+
+export const GUARDIAN_CREATURES: GuardianCreatureSpec[] = [
+  {
+    id: 'creature-lumen-bosque',
+    name: 'Lumen-Bit del Claro',
+    speciesLabel: 'CRIATURA DE FÓSFORO · BOSQUE DE LAS SEÑALES',
+    areaId: 'exterior-70s',
+    x: 825,
+    y: 968,
+    accentHex: '#34d399',
+    secondaryHex: '#facc15',
+    requiresLanternOrScanner: false,
+    dormantPrompt: 'Sintonizar Lumen-Bit',
+    calmedMessage:
+      'La polilla de fósforo danza alrededor de Pixel trazando ondas sinusoidales verdes: su zumbido reproduce el reloj de cristal de 14.318 MHz empleado en las primeras placas arcade.',
+    clueIdGranted: 'clue-frecuencia-bosque',
+  },
+  {
+    id: 'creature-sincro-laberinto',
+    name: 'Sincro-76 · Centinela de Fase',
+    speciesLabel: 'GUARDIÁN DE CORREDOR · LABERINTO 1976',
+    areaId: 'dungeon-laberinto-origen',
+    x: 440,
+    y: 302,
+    accentHex: '#f97316',
+    secondaryHex: '#22d3ee',
+    blocksPassageRect: { id: 'sincro-barrier', x: 416, y: 262, w: 48, h: 84 },
+    requiresLanternOrScanner: true,
+    dormantPrompt: 'Armonizar Centinela',
+    calmedMessage:
+      'Al bañarlo con la Lámpara de Fósforo [L] o el pulso del Escáner [R], Sincro-76 pliega sus escudos geométricos y despeja el corredor central del Laberinto de Señales.',
+  },
+  {
+    id: 'creature-vectra-caverna',
+    name: 'Vectra-79 · Prisma Viviente',
+    speciesLabel: 'ENTIDAD VECTORIAL · CAVERNAS DE MEMORIA',
+    areaId: 'exterior-70s',
+    x: 1140,
+    y: 652,
+    accentHex: '#a78bfa',
+    secondaryHex: '#22d3ee',
+    requiresLanternOrScanner: false,
+    dormantPrompt: 'Observar Prisma Vectra-79',
+    calmedMessage:
+      'Sus alas poliédricas trazan líneas puras sin píxeles escalonados, exactamente como un monitor vectorial XY cuyos ángulos maestros son 45°, 90° y 180°.',
+    clueIdGranted: 'clue-haz-vectorial-79',
+  },
+];
+
+export interface InvestigationCaseSpec {
+  id: string;
+  code: string;
+  title: string;
+  eraTag: string;
+  accentHex: string;
+  summary: string;
+  clues: {
+    id: string;
+    title: string;
+    sourceHint: string;
+    findingText: string;
+  }[];
+  deductionQuestion: string;
+  options: {
+    id: string;
+    label: string;
+    isCorrect: boolean;
+  }[];
+  conclusionText: string;
+  rewardSummary: string;
+  rewardItemIds: string[];
+}
+
+export const INVESTIGATION_CASES: InvestigationCaseSpec[] = [
+  {
+    id: 'case-origen-1972',
+    code: 'CASO-01',
+    title: 'El Enigma de la Taberna de Sunnyvale (1972)',
+    eraTag: 'INVESTIGACIÓN · 1971–1972',
+    accentHex: '#00f3ff',
+    summary:
+      'Averigua qué ocurrió realmente cuando el primer prototipo público de Pong dejó de funcionar apenas unos días después de su estreno.',
+    clues: [
+      {
+        id: 'clue-sunnyvale-monedas',
+        title: 'Recorte de Sunnyvale',
+        sourceHint: 'Inspecciona el recorte de prensa en el Centro de Historia (Aldea).',
+        findingText:
+          'Allan Alcorn abrió el prototipo en Andy Capp’s Tavern y halló el depósito de monedas desbordado de cuartos de dólar.',
+      },
+      {
+        id: 'clue-museo-odyssey-pong',
+        title: 'Placa Curatorial de 1972',
+        sourceHint: 'Examina el pedestal de Pong o Magnavox Odyssey en el Museo Viviente.',
+        findingText:
+          'Pong carecía de microprocesador y código de software; funcionaba con contadores TTL discretos sumamente fiables.',
+      },
+      {
+        id: 'clue-frecuencia-bosque',
+        title: 'Armonía de Cristal TTL',
+        sourceHint: 'Observa a la criatura Lumen-Bit en el Bosque de las Señales.',
+        findingText:
+          'El reloj de cristal de la placa mantenía el pulso intacto: la supuesta avería nunca fue electrónica.',
+      },
+    ],
+    deductionQuestion:
+      'Según las evidencias reunidas, ¿por qué dejó de aceptar partidas el primer prototipo de Pong en Sunnyvale?',
+    options: [
+      {
+        id: 'opt-overheat',
+        label: 'Se fundió el microprocesador de 8 bits por exceso de temperatura.',
+        isCorrect: false,
+      },
+      {
+        id: 'opt-coinbox',
+        label: 'El cajón de monedas rebosó de cuartos de dólar y bloqueó el mecanismo de entrada.',
+        isCorrect: true,
+      },
+      {
+        id: 'opt-crt',
+        label: 'Se agotó la batería interna de la memoria ROM tras cien partidas.',
+        isCorrect: false,
+      },
+    ],
+    conclusionText:
+      '¡Caso resuelto! El éxito fue tan abrumador que las monedas atascaron el mecanismo mecánico, confirmando a Atari que el videojuego arcade tenía un futuro masivo.',
+    rewardSummary: 'Registro Histórico Verificado + Avance de Cronista',
+    rewardItemIds: [],
+  },
+  {
+    id: 'case-muro-1976',
+    code: 'CASO-02',
+    title: 'Las Cuatro Bandas del Prototipo Secreto (1976)',
+    eraTag: 'INVESTIGACIÓN · BREAKOUT 1976',
+    accentHex: '#f97316',
+    summary:
+      'Descubre cómo lograba Breakout mostrar cuatro franjas de color en 1976 sin memoria gráfica RGB y cuál era su orden energético.',
+    clues: [
+      {
+        id: 'clue-celofan-wozniak',
+        title: 'Cuaderno de Bandas CRT',
+        sourceHint: 'Lee el cuaderno técnico dentro del Taller Analógico del Bosque.',
+        findingText:
+          'El monitor era monocromo blanco y negro; cuatro tiras físicas de celofán coloreaban el muro (Amarillo, Verde, Naranja y Rojo en la cima).',
+      },
+      {
+        id: 'clue-museo-breakout-hint',
+        title: 'Pedestal Cifrado de 1976',
+        sourceHint: 'Inspecciona el pedestal de Breakout (1976) en el Museo Viviente.',
+        findingText:
+          'El diseño original optimizado en cuatro noches redujo drásticamente el número de chips TTL antes de la era del Apple II.',
+      },
+      {
+        id: 'clue-secuencia-laberinto',
+        title: 'Estela del Laberinto',
+        sourceHint: 'Desciende a la Escotilla de 1976 al norte de las Praderas de Pong.',
+        findingText:
+          'La puntuación y la velocidad aumentan al perforar desde la base amarilla hasta la franja roja superior.',
+      },
+    ],
+    deductionQuestion:
+      '¿Qué técnica permitía ver ladrillos amarillos, verdes, naranjas y rojos en el gabinete original de Breakout (1976)?',
+    options: [
+      {
+        id: 'opt-celofan',
+        label: 'Tiras translúcidas de celofán adheridas sobre un monitor CRT monocromo.',
+        isCorrect: true,
+      },
+      {
+        id: 'opt-vga',
+        label: 'Una tarjeta gráfica VGA de 256 colores conectada a un chip de sonido FM.',
+        isCorrect: false,
+      },
+      {
+        id: 'opt-laser',
+        label: 'Proyectores láser rotatorios detrás de un espejo cóncavo.',
+        isCorrect: false,
+      },
+    ],
+    conclusionText:
+      '¡Deducción impecable! Aquel ingenio óptico de celofán sobre fósforo blanco convirtió una señal monocroma en uno de los iconos cromáticos más célebres de los años 70.',
+    rewardSummary: 'Lámina de Celofán Ámbar-Cian [CEL-76]',
+    rewardItemIds: ['item-filtro-interdecada'],
+  },
+  {
+    id: 'case-horizonte-vectorial',
+    code: 'CASO-03',
+    title: 'El Salto de los Haces de Luz Pura (1979)',
+    eraTag: 'INVESTIGACIÓN · FRONTERA 1979',
+    accentHex: '#a78bfa',
+    summary:
+      'Investiga cómo cerraron la década de 1970 clásicos como Lunar Lander y Asteroids antes de la llegada del color raster de los años 80.',
+    clues: [
+      {
+        id: 'clue-haz-vectorial-79',
+        title: 'Geometría de Vectra-79',
+        sourceHint: 'Observa a la criatura Vectra-79 en Las Cavernas de Memoria.',
+        findingText:
+          'Sus trazos luminosos se orientan en ángulos exactos de 45°, 90° y 180° sin barrido horizontal de televisión.',
+      },
+      {
+        id: 'clue-museo-vector-1979',
+        title: 'Placas de Lunar Lander y Asteroids',
+        sourceHint: 'Examina las exhibiciones de 1979 en el ala derecha del Museo Viviente.',
+        findingText:
+          'En 1979, el Generador Vectorial Digital (DVG) dirigía el haz de electrones directamente entre coordenadas X e Y.',
+      },
+    ],
+    deductionQuestion:
+      '¿Qué diferenciaba a los monitores vectoriales de Lunar Lander y Asteroids (1979) frente a las pantallas arcade convencionales?',
+    options: [
+      {
+        id: 'opt-lcd',
+        label: 'Utilizaban pantallas de cristal líquido iluminadas con velas internas.',
+        isCorrect: false,
+      },
+      {
+        id: 'opt-xy-beam',
+        label: 'Trazaban líneas geométricas directas entre puntos X-Y con el haz de electrones, logrando nitidez extrema.',
+        isCorrect: true,
+      },
+      {
+        id: 'opt-film',
+        label: 'Reproducían rollos de película de celuloide de 16 milímetros.',
+        isCorrect: false,
+      },
+    ],
+    conclusionText:
+      '¡Caso cerrado! La tecnología vectorial XY de 1979 coronó la primera década arcade con naves ingrávidas y rocas afiladas de luz pura.',
+    rewardSummary: 'Lente Vectorial QuadraScan [VEC-79]',
+    rewardItemIds: ['item-lente-vectorial-79'],
+  },
+];
 
 export function doesCircleCollideRect(
   cx: number,
@@ -1886,7 +2757,9 @@ export function isBlockedByExteriorBuilding(px: number, py: number): boolean {
 export function isWalkableInSubArea(
   area: SubAreaSpec,
   px: number,
-  py: number
+  py: number,
+  calmedCreatureIds: string[] = [],
+  allUnlocked = false
 ): boolean {
   const b = area.walkableBounds;
   if (px < b.x + 14 || px > b.x + b.w - 14 || py < b.y + 14 || py > b.y + b.h - 14) {
@@ -1897,5 +2770,18 @@ export function isWalkableInSubArea(
       return false;
     }
   }
+  if (!allUnlocked) {
+    for (const cr of GUARDIAN_CREATURES) {
+      if (
+        cr.areaId === area.id &&
+        cr.blocksPassageRect &&
+        !calmedCreatureIds.includes(cr.id) &&
+        doesCircleCollideRect(px, py, 13, cr.blocksPassageRect)
+      ) {
+        return false;
+      }
+    }
+  }
   return true;
 }
+

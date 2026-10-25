@@ -11,38 +11,35 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Award,
-  Backpack,
-  BookOpen,
-  Compass,
-  Diamond,
-  Flame,
-  Map as MapIcon,
-  Radio,
-  Save,
-  ScrollText,
-  Sparkles,
-} from 'lucide-react';
+import { Map as MapIcon } from 'lucide-react';
 import { retroAudio } from '../audio/retroAudio';
 import { ArchitectCodexModal } from '../memories/ArchitectCodexModal';
+import { MUSEUM_1970S_EXHIBITS } from '../memories/historicalCatalog';
 import {
+  BREAKOUT_UNLOCK_SCORE,
   PONG_UNLOCK_SCORE,
   PixelverseProgressState,
   SPACE_INVADERS_UNLOCK_SCORE,
 } from '../memories/progressionState';
 import {
+  BREAKOUT_CABINET_INTERACT,
   BROKEN_RELAY_MECHANISM,
   COASTAL_SUBTERRANEAN_TUNNELS,
   DK_CABINET_80S_INTERACT,
   evaluateTimeMachineStatus,
   FacingDirection,
+  GUARDIAN_CREATURES,
   HARBOR_80S_FERRY,
   ISLAND_70S_BUILDINGS,
   ISLAND_ANOMALY_PORTALS,
   ISLAND_WOODEN_SIGNS,
   isBlockedByExteriorBuilding,
   isWalkableInSubArea,
+  LABYRINTH_1976_ENTRANCE,
+  LABYRINTH_RGB_PILLARS,
+  LABYRINTH_SECRET_DOOR,
+  MUSEUM_PEDESTAL_SPOTS,
+  MUSEUM_VECTOR_CONSOLE,
   RPG_CHESTS,
   RPG_EXAMINABLES,
   RPG_ITEMS,
@@ -82,6 +79,7 @@ export type Island70sArrivalMode =
   | 'pong-board'
   | 'glitch-trail-cleared'
   | 'invaders-ship'
+  | 'return-breakout'
   | 'return-80s';
 
 export interface Origin70sIslandProps {
@@ -92,6 +90,7 @@ export interface Origin70sIslandProps {
   arrivalMode: Island70sArrivalMode;
   progressState: PixelverseProgressState;
   onEnterPong: () => void;
+  onEnterBreakout: () => void;
   onEnterGlitchTrail: () => void;
   onEnterSpaceInvaders: () => void;
   onEnterDonkeyKong: () => void;
@@ -103,8 +102,13 @@ export interface Origin70sIslandProps {
   onSavePosition: (x: number, y: number) => void;
   onSave80sPosition: (x: number, y: number) => void;
   onManualSave: (x: number, y: number) => void;
+  onManualSave80s?: (x: number, y: number) => void;
   onOpenChest: (chestId: string, rewardItemIds: string[]) => void;
   onDiscoverSecret: (secretId: string) => void;
+  onDiscoverClue: (clueId: string) => void;
+  onSolveCase: (caseId: string, rewardItemIds?: string[]) => void;
+  onCalmCreature: (creatureId: string) => void;
+  onInspectExhibit: (exhibitId: string) => void;
   onSolvePuzzle: (puzzleId: string, rewardItemIds?: string[]) => void;
   onRepairMechanism: (mechanismId: string, alsoSwitches?: string[]) => void;
   onUpdateQuest: (
@@ -115,6 +119,13 @@ export interface Origin70sIslandProps {
   onEquipCosmetic: (cosmeticId: string | null) => void;
   onToggleLantern: (forceValue?: boolean) => void;
   onArrivalSequenceFinished?: () => void;
+  isGbGreenMode?: boolean;
+  onToggleGbGreenMode?: () => void;
+  isAudioMuted?: boolean;
+  onToggleAudio?: () => void;
+  onOpenLevelSelector?: () => void;
+  externalModalOpen?: boolean;
+  manualSaveTriggerRef?: React.MutableRefObject<(() => string) | null>;
 }
 
 interface InteractivePromptTarget {
@@ -129,6 +140,13 @@ interface InteractivePromptTarget {
     | 'glitch-portal'
     | 'invaders-cabinet'
     | 'dk-cabinet-80s'
+    | 'breakout-cabinet'
+    | 'labyrinth-hatch'
+    | 'labyrinth-secret-door'
+    | 'rgb-pillar'
+    | 'museum-pedestal'
+    | 'vector-console'
+    | 'guardian-creature'
     | 'astrolabe'
     | 'npc'
     | 'sub-npc'
@@ -157,6 +175,10 @@ interface ActiveDialogModal {
   paragraphs: string[];
   hint?: string;
   accentHex: string;
+  primaryAction?: {
+    label: string;
+    onSelect: () => void;
+  };
 }
 
 const TOTAL_70S_DIAMONDS = 9; // 5 en la Gran Isla + 4 en El Sendero del Glitch Perdido
@@ -169,6 +191,7 @@ export function Origin70sIsland({
   arrivalMode,
   progressState,
   onEnterPong,
+  onEnterBreakout,
   onEnterGlitchTrail,
   onEnterSpaceInvaders,
   onEnterDonkeyKong,
@@ -180,18 +203,32 @@ export function Origin70sIsland({
   onSavePosition,
   onSave80sPosition,
   onManualSave,
+  onManualSave80s,
   onOpenChest,
   onDiscoverSecret,
+  onDiscoverClue,
+  onSolveCase,
+  onCalmCreature,
+  onInspectExhibit,
   onSolvePuzzle,
   onRepairMechanism,
   onUpdateQuest,
   onEquipCosmetic,
   onToggleLantern,
   onArrivalSequenceFinished,
+  isGbGreenMode,
+  onToggleGbGreenMode,
+  isAudioMuted,
+  onToggleAudio,
+  onOpenLevelSelector,
+  externalModalOpen,
+  manualSaveTriggerRef,
 }: Origin70sIslandProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const pongRestored = Boolean(progressState.games['pong']?.memoryUnlocked) || allUnlocked;
+  const breakoutRestored =
+    Boolean(progressState.games['breakout']?.memoryUnlocked) || allUnlocked;
   const glitchTrailCleared =
     Boolean(progressState.island70s.glitchTrailCompleted) ||
     Boolean(progressState.games['glitch-trail']?.completed) ||
@@ -230,6 +267,16 @@ export function Origin70sIsland({
       ? { ...progressState.island70s.lastIslandPos }
       : { ...ISLAND_KEY_COORDS.awakeningSpawn };
 
+    if (arrivalMode === 'return-breakout') {
+      return {
+        areaId: 'secret-sala-breakout',
+        x: 380,
+        y: 286,
+        extReturnX: LABYRINTH_1976_ENTRANCE.returnExteriorX,
+        extReturnY: LABYRINTH_1976_ENTRANCE.returnExteriorY,
+      };
+    }
+
     if (
       arrivalMode === 'return-80s' ||
       (arrivalMode === 'standard' && progressState.rpg.lastSafeArea === 'island-80s')
@@ -239,7 +286,13 @@ export function Origin70sIsland({
         arrivalMode === 'return-80s'
           ? { x: 702, y: 344 }
           : progressState.rpg.last80sPos ?? { x: 215, y: 360 };
-      const valid80s = isWalkableInSubArea(spec80s, candidate80s.x, candidate80s.y)
+      const valid80s = isWalkableInSubArea(
+        spec80s,
+        candidate80s.x,
+        candidate80s.y,
+        progressState.rpg.calmedCreatureIds,
+        allUnlocked
+      )
         ? candidate80s
         : { x: 215, y: 360 };
       return {
@@ -322,6 +375,7 @@ export function Origin70sIsland({
   });
 
   const steppedTilesRef = useRef<number[]>([]);
+  const activeRgbPillarsRef = useRef<number[]>([]);
   const scannerPulseRef = useRef<{ active: boolean; elapsed: number }>({
     active: false,
     elapsed: 0,
@@ -343,8 +397,10 @@ export function Origin70sIsland({
   const [codexOpen, setCodexOpen] = useState<boolean>(false);
   const [inventoryOpen, setInventoryOpen] = useState<boolean>(false);
   const [questsOpen, setQuestsOpen] = useState<boolean>(false);
+  const [vectorModalOpen, setVectorModalOpen] = useState<boolean>(false);
+  const [vectorAngles, setVectorAngles] = useState<[number, number, number]>([0, 45, 90]);
   const [toastBanner, setToastBanner] = useState<string | null>(null);
-  const [minimapOpen, setMinimapOpen] = useState<boolean>(true);
+  const [minimapOpen, setMinimapOpen] = useState<boolean>(false);
   const [flightStatusText, setFlightStatusText] = useState<string | null>(null);
   const [playerMiniPos, setPlayerMiniPos] = useState<{ x: number; y: number }>({
     x: initSetupRef.current.x,
@@ -352,7 +408,13 @@ export function Origin70sIsland({
   });
 
   const anyModalOpen =
-    Boolean(activeDialog) || codexOpen || inventoryOpen || questsOpen || chronoWarpActive;
+    Boolean(externalModalOpen) ||
+    Boolean(activeDialog) ||
+    codexOpen ||
+    inventoryOpen ||
+    questsOpen ||
+    vectorModalOpen ||
+    chronoWarpActive;
 
   const latestStateRef = useRef({
     skinColor,
@@ -360,6 +422,7 @@ export function Origin70sIsland({
     shirtColor,
     allUnlocked,
     pongRestored,
+    breakoutRestored,
     glitchTrailCleared,
     invadersRestored,
     dkRestored,
@@ -367,6 +430,7 @@ export function Origin70sIsland({
     southShortcutActive,
     progressState,
     modalOpen: anyModalOpen,
+    chronoWarpActive,
   });
   latestStateRef.current = {
     skinColor,
@@ -374,6 +438,7 @@ export function Origin70sIsland({
     shirtColor,
     allUnlocked,
     pongRestored,
+    breakoutRestored,
     glitchTrailCleared,
     invadersRestored,
     dkRestored,
@@ -381,10 +446,12 @@ export function Origin70sIsland({
     southShortcutActive,
     progressState,
     modalOpen: anyModalOpen,
+    chronoWarpActive,
   };
 
   const callbacksRef = useRef({
     onEnterPong,
+    onEnterBreakout,
     onEnterGlitchTrail,
     onEnterSpaceInvaders,
     onEnterDonkeyKong,
@@ -396,8 +463,13 @@ export function Origin70sIsland({
     onSavePosition,
     onSave80sPosition,
     onManualSave,
+    onManualSave80s,
     onOpenChest,
     onDiscoverSecret,
+    onDiscoverClue,
+    onSolveCase,
+    onCalmCreature,
+    onInspectExhibit,
     onSolvePuzzle,
     onRepairMechanism,
     onUpdateQuest,
@@ -407,6 +479,7 @@ export function Origin70sIsland({
   });
   callbacksRef.current = {
     onEnterPong,
+    onEnterBreakout,
     onEnterGlitchTrail,
     onEnterSpaceInvaders,
     onEnterDonkeyKong,
@@ -418,8 +491,13 @@ export function Origin70sIsland({
     onSavePosition,
     onSave80sPosition,
     onManualSave,
+    onManualSave80s,
     onOpenChest,
     onDiscoverSecret,
+    onDiscoverClue,
+    onSolveCase,
+    onCalmCreature,
+    onInspectExhibit,
     onSolvePuzzle,
     onRepairMechanism,
     onUpdateQuest,
@@ -427,6 +505,42 @@ export function Origin70sIsland({
     onToggleLantern,
     onArrivalSequenceFinished,
   };
+
+  const performIslandManualSave = useCallback((): string => {
+    const curArea = activeAreaRef.current;
+    if (curArea === 'island-80s') {
+      const px = playerPosBridgeRef.current.x;
+      const py = playerPosBridgeRef.current.y;
+      if (callbacksRef.current.onManualSave80s) {
+        callbacksRef.current.onManualSave80s(px, py);
+      } else {
+        callbacksRef.current.onSave80sPosition(px, py);
+      }
+      return 'Isla Neón 1980s';
+    }
+
+    if (curArea === 'exterior-70s') {
+      const px = playerPosBridgeRef.current.x;
+      const py = playerPosBridgeRef.current.y;
+      callbacksRef.current.onManualSave(px, py);
+      return `Isla del Origen · ${ISLAND_ZONES[currentZoneId]?.name ?? 'Exterior 1970s'}`;
+    }
+
+    const safeExtX = exteriorReturnPosRef.current.x;
+    const safeExtY = exteriorReturnPosRef.current.y;
+    callbacksRef.current.onManualSave(safeExtX, safeExtY);
+    return `${SUB_AREAS[curArea]?.name ?? 'Interior'} · Entrada asegurada`;
+  }, [currentZoneId]);
+
+  useEffect(() => {
+    if (!manualSaveTriggerRef) return;
+    manualSaveTriggerRef.current = performIslandManualSave;
+    return () => {
+      if (manualSaveTriggerRef.current === performIslandManualSave) {
+        manualSaveTriggerRef.current = null;
+      }
+    };
+  }, [manualSaveTriggerRef, performIslandManualSave]);
 
   const nearbyPromptRef = useRef<InteractivePromptTarget | null>(null);
   nearbyPromptRef.current = nearbyPrompt;
@@ -489,6 +603,7 @@ export function Origin70sIsland({
         setActiveAreaId(nextArea);
         setNearbyPrompt(null);
         steppedTilesRef.current = [];
+        activeRgbPillarsRef.current = [];
         playerPosBridgeRef.current.teleportPending = {
           x: spawnX,
           y: spawnY,
@@ -562,7 +677,25 @@ export function Origin70sIsland({
     }
     retroAudio.scannerPing();
     scannerPulseRef.current = { active: true, elapsed: 0 };
-    showToast('Pulso Escáner TTL emitido · Buscando muros falsos, cofres y reliquias...');
+
+    const px = playerPosBridgeRef.current.x;
+    const py = playerPosBridgeRef.current.y;
+    const curArea = activeAreaRef.current;
+    for (const cr of GUARDIAN_CREATURES) {
+      if (
+        cr.areaId === curArea &&
+        cr.requiresLanternOrScanner &&
+        !st.progressState.rpg.calmedCreatureIds.includes(cr.id) &&
+        Math.hypot(px - cr.x, py - cr.y) < 160
+      ) {
+        retroAudio.creatureChime(true);
+        callbacksRef.current.onCalmCreature(cr.id);
+        showToast(`¡Pulso TTL armonizado! ${cr.name} despeja el corredor.`);
+        return;
+      }
+    }
+
+    showToast('Pulso Escáner TTL emitido · Buscando muros falsos, cofres y frecuencias...');
   }, [showToast]);
 
   const handleToggleLanternAction = useCallback(() => {
@@ -1117,6 +1250,12 @@ export function Origin70sIsland({
         if (exam.secretIdToDiscover) {
           callbacksRef.current.onDiscoverSecret(exam.secretIdToDiscover);
         }
+        if (exam.clueIdToDiscover) {
+          callbacksRef.current.onDiscoverClue(exam.clueIdToDiscover);
+          if (!st.progressState.rpg.questStates['quest-casos-origen']) {
+            callbacksRef.current.onUpdateQuest('quest-casos-origen', 'active');
+          }
+        }
         setActiveDialog({
           category: exam.category,
           title: exam.label,
@@ -1363,6 +1502,307 @@ export function Origin70sIsland({
           });
           return;
         }
+
+        if (snpc.id === 'npc-curadora-selene') {
+          if (!st.progressState.rpg.questStates['quest-casos-origen']) {
+            callbacksRef.current.onUpdateQuest('quest-casos-origen', 'active');
+          }
+          setActiveDialog({
+            category: snpc.role.toUpperCase(),
+            title: snpc.name,
+            subtitle: `Museo Viviente de los 70 · Vitrinas inspeccionadas: ${st.progressState.rpg.inspectedExhibitIds.length}/${MUSEUM_1970S_EXHIBITS.length}`,
+            paragraphs: [
+              '«¡Bienvenido al Museo Viviente de la Década de 1970! Aquí conviven los gabinetes jugables restaurados por ti —como Pong (1972), Breakout (1976) y Space Invaders (1978)— junto a exhibiciones históricas documentadas como Computer Space (1971), Magnavox Odyssey (1972), Gran Trak 10 (1974), Lunar Lander (1979) y Asteroids (1979).»',
+              st.breakoutRestored
+                ? '«¡La vitrina de Breakout (1976) brilla ya con sus cuatro bandas cromáticas restauradas! No olvides calibrar el Proyector Vectorial QuadraScan XY en el centro del salón si observaste los ángulos de Vectra-79 en las cavernas.»'
+                : '«Notarás que el pedestal de Breakout (1976) en el ala derecha permanece cifrado: su gabinete original descansa bajo una escotilla secreta al norte de Las Praderas de Pong.»',
+            ],
+            hint: 'Examina cada pedestal para reunir pistas de tus Casos de Investigación [Q].',
+            accentHex: snpc.palette.glow,
+          });
+          return;
+        }
+      }
+
+      if (target.kind === 'labyrinth-hatch') {
+        const firstVisit = !st.progressState.rpg.discoveredSecretIds.includes(
+          'secret-laberinto-1976'
+        );
+        if (firstVisit) {
+          retroAudio.secretFound();
+          callbacksRef.current.onDiscoverSecret('secret-laberinto-1976');
+        }
+        if (!st.progressState.rpg.questStates['quest-muro-1976']) {
+          callbacksRef.current.onUpdateQuest('quest-muro-1976', 'active');
+        }
+        exteriorReturnPosRef.current = {
+          x: LABYRINTH_1976_ENTRANCE.returnExteriorX,
+          y: LABYRINTH_1976_ENTRANCE.returnExteriorY,
+        };
+        transitionToArea(
+          LABYRINTH_1976_ENTRANCE.targetArea,
+          LABYRINTH_1976_ENTRANCE.targetSpawnX,
+          LABYRINTH_1976_ENTRANCE.targetSpawnY,
+          'up',
+          firstVisit
+            ? '¡Descubriste el Laberinto Subterráneo de Señales (Sector 1976)!'
+            : 'Descendiendo al Laberinto de Señales · Sector 1976'
+        );
+        return;
+      }
+
+      if (target.kind === 'labyrinth-secret-door') {
+        const solved =
+          st.allUnlocked ||
+          st.progressState.rpg.solvedPuzzleIds.includes(LABYRINTH_SECRET_DOOR.puzzleId);
+        if (!solved) {
+          retroAudio.npcBlip(0.75);
+          setActiveDialog({
+            category: 'COMPUERTA DE CUATRO BANDAS · SELLADA',
+            title: LABYRINTH_SECRET_DOOR.label,
+            subtitle: `Pilares RGB sincronizados: ${activeRgbPillarsRef.current.length} / 4`,
+            paragraphs: [
+              'Cuatro cerrojos ópticos mantienen sellada la Sala Secreta de 1976. Debes activar los cuatro pilares cromáticos del laberinto en el orden ascendente en que la esfera perfora el muro de Breakout.',
+            ],
+            hint: 'Consulta la estela del corredor noroeste o el cuaderno del Taller Analógico (Amarillo → Verde → Naranja → Rojo).',
+            accentHex: '#f97316',
+          });
+          return;
+        }
+        if (
+          !st.progressState.rpg.discoveredSecretIds.includes('secret-sala-breakout-1976')
+        ) {
+          callbacksRef.current.onDiscoverSecret('secret-sala-breakout-1976');
+        }
+        transitionToArea(
+          LABYRINTH_SECRET_DOOR.targetArea,
+          LABYRINTH_SECRET_DOOR.targetSpawnX,
+          LABYRINTH_SECRET_DOOR.targetSpawnY,
+          'up',
+          'Sala Secreta de las Cuatro Bandas · Prototipo Breakout (1976)'
+        );
+        return;
+      }
+
+      if (target.kind === 'rgb-pillar') {
+        const pillar = LABYRINTH_RGB_PILLARS.find((p) => p.id === target.id);
+        if (!pillar) return;
+        const alreadySolved = st.progressState.rpg.solvedPuzzleIds.includes(
+          LABYRINTH_SECRET_DOOR.puzzleId
+        );
+        if (alreadySolved) {
+          retroAudio.puzzleNodeTone(pillar.stepOrder);
+          showToast(`${pillar.bandName} · Frecuencia bloqueada en fase óptima.`);
+          return;
+        }
+        const curSeq = activeRgbPillarsRef.current;
+        if (curSeq.includes(pillar.stepOrder)) {
+          retroAudio.puzzleNodeTone(pillar.stepOrder);
+          showToast(`${pillar.bandName} ya está encendido (${curSeq.length}/4).`);
+          return;
+        }
+        const expected = curSeq.length + 1;
+        if (pillar.stepOrder === expected) {
+          const nextSeq = [...curSeq, pillar.stepOrder];
+          activeRgbPillarsRef.current = nextSeq;
+          retroAudio.puzzleNodeTone(pillar.stepOrder);
+          if (nextSeq.length === 4) {
+            retroAudio.secretFound();
+            callbacksRef.current.onSolvePuzzle(LABYRINTH_SECRET_DOOR.puzzleId);
+            showToast(
+              '¡Secuencia RGB 1976 completada! La Compuerta Norte hacia Breakout se ha desbloqueado.'
+            );
+          } else {
+            showToast(
+              `Frecuencia ${pillar.pointsHint} sintonizada (${nextSeq.length}/4)`
+            );
+          }
+        } else {
+          activeRgbPillarsRef.current = [];
+          retroAudio.npcBlip(0.66);
+          showToast(
+            'Secuencia cromática fuera de fase · Reiniciando pilares (comienza por la base Amarilla).'
+          );
+        }
+        return;
+      }
+
+      if (target.kind === 'breakout-cabinet') {
+        if (
+          !st.progressState.rpg.discoveredSecretIds.includes('secret-sala-breakout-1976')
+        ) {
+          callbacksRef.current.onDiscoverSecret('secret-sala-breakout-1976');
+        }
+        retroAudio.uiClick();
+        callbacksRef.current.onEnterBreakout();
+        return;
+      }
+
+      if (target.kind === 'museum-pedestal') {
+        const exhibit = MUSEUM_1970S_EXHIBITS.find((e) => e.id === target.id);
+        if (!exhibit) return;
+
+        callbacksRef.current.onInspectExhibit(exhibit.id);
+
+        if (
+          exhibit.id === 'exhibit-pong-1972' ||
+          exhibit.id === 'exhibit-odyssey-1972'
+        ) {
+          callbacksRef.current.onDiscoverClue('clue-museo-odyssey-pong');
+        } else if (exhibit.id === 'exhibit-breakout-1976') {
+          callbacksRef.current.onDiscoverClue('clue-museo-breakout-hint');
+        } else if (
+          exhibit.id === 'exhibit-lunar-lander-1979' ||
+          exhibit.id === 'exhibit-asteroids-1979'
+        ) {
+          callbacksRef.current.onDiscoverClue('clue-museo-vector-1979');
+        }
+
+        const isEncryptedBreakout =
+          exhibit.id === 'exhibit-breakout-1976' &&
+          !st.breakoutRestored &&
+          !st.progressState.rpg.discoveredSecretIds.includes('secret-sala-breakout-1976');
+
+        if (isEncryptedBreakout) {
+          retroAudio.npcBlip(0.8);
+          setActiveDialog({
+            category: 'VITRINA CIFRADA · HITO JUGABLE OCULTO (1976)',
+            title: 'Señal Encriptada: El Muro de Cuatro Bandas',
+            subtitle: 'Pista registrada en tu Diario de Investigación [Q]',
+            paragraphs: [
+              'El proyector muestra cuatro franjas traslúcidas (amarillo, verde, naranja y rojo) vibrando en estática. La placa indica que el gabinete original de 1976 fue resguardado en una cámara subterránea al norte de Las Praderas de Pong.',
+              'Nota técnica conservada: su diseño original en Atari redujo la placa a menos de cincuenta chips TTL antes del nacimiento del ordenador personal moderno.',
+            ],
+            hint: 'Busca la Escotilla Subterránea al norte del Santuario de Pong para descubrir y jugar Breakout (1976).',
+            accentHex: '#f97316',
+          });
+          return;
+        }
+
+        retroAudio.echoDiscover();
+        let primaryAction: ActiveDialogModal['primaryAction'] = undefined;
+        if (exhibit.mode === 'playable') {
+          if (exhibit.linkedGameId === 'pong') {
+            primaryAction = {
+              label: st.pongRestored ? 'Jugar Pong (1972)' : 'Ir a Pong (1972)',
+              onSelect: () => {
+                setActiveDialog(null);
+                callbacksRef.current.onEnterPong();
+              },
+            };
+          } else if (
+            exhibit.linkedGameId === 'breakout' &&
+            (st.breakoutRestored ||
+              st.progressState.rpg.discoveredSecretIds.includes(
+                'secret-sala-breakout-1976'
+              ))
+          ) {
+            primaryAction = {
+              label: st.breakoutRestored
+                ? 'Rejugar Breakout (1976)'
+                : `Jugar Breakout (Meta ${BREAKOUT_UNLOCK_SCORE} PTS)`,
+              onSelect: () => {
+                setActiveDialog(null);
+                callbacksRef.current.onEnterBreakout();
+              },
+            };
+          } else if (
+            exhibit.linkedGameId === 'space-invaders' &&
+            st.invadersCabinetUnlocked
+          ) {
+            primaryAction = {
+              label: st.invadersRestored
+                ? 'Rejugar Space Invaders (1978)'
+                : 'Jugar Space Invaders (1978)',
+              onSelect: () => {
+                setActiveDialog(null);
+                callbacksRef.current.onEnterSpaceInvaders();
+              },
+            };
+          }
+        }
+
+        setActiveDialog({
+          category:
+            exhibit.mode === 'playable'
+              ? `MUSEO VIVIENTE · VIDEOJUEGO JUGABLE (${exhibit.year})`
+              : `MUSEO VIVIENTE · EXHIBICIÓN HISTÓRICA DOCUMENTADA (${exhibit.year})`,
+          title: `${exhibit.title} (${exhibit.year})`,
+          subtitle: `${exhibit.creator} · ${exhibit.company}`,
+          paragraphs: [
+            exhibit.historicalSummary,
+            `Hardware: ${exhibit.hardwareType} · ${exhibit.curatorialNote}`,
+          ],
+          hint:
+            exhibit.mode === 'playable'
+              ? 'Este título forma parte del catálogo jugable activo de PIXELVERSE.'
+              : 'Pieza de archivo documental e interactivo del Museo Viviente de los años 70.',
+          accentHex: exhibit.accentHex,
+          primaryAction,
+        });
+        return;
+      }
+
+      if (target.kind === 'vector-console') {
+        const solved =
+          st.allUnlocked ||
+          st.progressState.rpg.solvedPuzzleIds.includes(MUSEUM_VECTOR_CONSOLE.puzzleId);
+        if (solved) {
+          retroAudio.echoDiscover();
+          showToast(
+            'Proyector QuadraScan XY alineado en 45° · 90° · 180° — Vitrinario Vectorial abierto.'
+          );
+          return;
+        }
+        retroAudio.uiClick();
+        setVectorModalOpen(true);
+        return;
+      }
+
+      if (target.kind === 'guardian-creature') {
+        const cr = GUARDIAN_CREATURES.find((c) => c.id === target.id);
+        if (!cr) return;
+        const alreadyCalmed =
+          st.allUnlocked || st.progressState.rpg.calmedCreatureIds.includes(cr.id);
+
+        if (cr.requiresLanternOrScanner && !alreadyCalmed) {
+          const lanternReady = st.progressState.rpg.lanternActive;
+          if (!lanternReady) {
+            retroAudio.creatureChime(false);
+            setActiveDialog({
+              category: cr.speciesLabel,
+              title: cr.name,
+              subtitle: 'Corredor protegido por resonancia de fase',
+              paragraphs: [
+                'El centinela geométrico vibra en desfase e impide cruzar el pasillo central del Laberinto de Señales.',
+                'Enciende tu Lámpara de Fósforo [L] antes de interactuar con él, o emite un pulso con el Escáner de Secretos [R] a su lado para armonizar su frecuencia.',
+              ],
+              accentHex: cr.accentHex,
+            });
+            return;
+          }
+        }
+
+        retroAudio.creatureChime(true);
+        if (!alreadyCalmed) {
+          callbacksRef.current.onCalmCreature(cr.id);
+        }
+        if (cr.clueIdGranted) {
+          callbacksRef.current.onDiscoverClue(cr.clueIdGranted);
+          if (!st.progressState.rpg.questStates['quest-casos-origen']) {
+            callbacksRef.current.onUpdateQuest('quest-casos-origen', 'active');
+          }
+        }
+        setActiveDialog({
+          category: cr.speciesLabel,
+          title: cr.name,
+          subtitle: cr.clueIdGranted
+            ? 'Frecuencia sintonizada · Evidencia añadida al Diario [Q]'
+            : 'Frecuencia armonizada · Paso despejado',
+          paragraphs: [cr.calmedMessage],
+          accentHex: cr.accentHex,
+        });
+        return;
       }
 
       if (target.kind === 'dk-cabinet-80s') {
@@ -1540,7 +1980,7 @@ export function Origin70sIsland({
         '¡Puente Astral reconstruido! Cruza hacia el este para alcanzar La Fortaleza de las Oleadas (1978).'
       );
       onArrivalSequenceFinished?.();
-    } else if (arrivalMode === 'return-80s') {
+    } else if (arrivalMode === 'return-80s' || arrivalMode === 'return-breakout') {
       onArrivalSequenceFinished?.();
     }
   }, [arrivalMode, onArrivalSequenceFinished, showToast]);
@@ -1599,65 +2039,89 @@ export function Origin70sIsland({
       const code = e.code;
       keys[code] = true;
 
+      const hasModifier = e.ctrlKey || e.metaKey || e.altKey;
+      const lowerKey = e.key.toLowerCase();
+
       if (code === 'Escape') {
-        if (latestStateRef.current.modalOpen) {
+        if (latestStateRef.current.modalOpen && !latestStateRef.current.chronoWarpActive) {
           e.preventDefault();
+          if (e.repeat) return;
           setActiveDialog(null);
           setCodexOpen(false);
           setInventoryOpen(false);
           setQuestsOpen(false);
+          setVectorModalOpen(false);
           return;
         }
       }
 
-      if (code === 'KeyI') {
+      if (!hasModifier && (lowerKey === 'i' || code === 'KeyI')) {
+        if (latestStateRef.current.chronoWarpActive) return;
         e.preventDefault();
+        if (e.repeat) return;
         retroAudio.uiClick();
+        setActiveDialog(null);
+        setVectorModalOpen(false);
         setCodexOpen(false);
         setQuestsOpen(false);
         setInventoryOpen((prev) => !prev);
         return;
       }
 
-      if (code === 'KeyQ') {
+      if (!hasModifier && (lowerKey === 'q' || code === 'KeyQ')) {
+        if (latestStateRef.current.chronoWarpActive) return;
         e.preventDefault();
+        if (e.repeat) return;
         retroAudio.uiClick();
+        setActiveDialog(null);
+        setVectorModalOpen(false);
         setCodexOpen(false);
         setInventoryOpen(false);
         setQuestsOpen((prev) => !prev);
         return;
       }
 
-      if (code === 'KeyC') {
+      if (!hasModifier && (lowerKey === 'c' || code === 'KeyC')) {
+        if (latestStateRef.current.chronoWarpActive) return;
         e.preventDefault();
+        if (e.repeat) return;
         retroAudio.uiClick();
+        setActiveDialog(null);
+        setVectorModalOpen(false);
         setInventoryOpen(false);
         setQuestsOpen(false);
         setCodexOpen((prev) => !prev);
         return;
       }
 
-      if (code === 'KeyL' && !latestStateRef.current.modalOpen) {
+      if (!hasModifier && (lowerKey === 'l' || code === 'KeyL') && !latestStateRef.current.modalOpen) {
         e.preventDefault();
+        if (e.repeat) return;
         handleToggleLanternAction();
         return;
       }
 
-      if (code === 'KeyR' && !latestStateRef.current.modalOpen) {
+      if (!hasModifier && (lowerKey === 'r' || code === 'KeyR') && !latestStateRef.current.modalOpen) {
         e.preventDefault();
+        if (e.repeat) return;
         handleUseScannerPulse();
         return;
       }
 
-      if (code === 'Tab') {
+      if (code === 'Tab' && !latestStateRef.current.modalOpen) {
         e.preventDefault();
+        if (e.repeat) return;
         setMinimapOpen((prev) => !prev);
         return;
       }
 
       if (code === 'KeyE' || code === 'Enter' || code === 'Space') {
+        if (e.repeat) return;
         if (latestStateRef.current.modalOpen) {
-          if (code === 'KeyE' || code === 'Enter') {
+          if (
+            (code === 'KeyE' || code === 'Enter') &&
+            !latestStateRef.current.chronoWarpActive
+          ) {
             e.preventDefault();
             setActiveDialog(null);
             setCodexOpen(false);
@@ -1709,7 +2173,11 @@ export function Origin70sIsland({
       }
 
       const prompt = nearbyPromptRef.current;
-      if (prompt && Math.hypot(wx - prompt.x, wy - prompt.y) < 76) {
+      if (
+        prompt &&
+        (Math.hypot(wx - prompt.x, wy - prompt.y) < 76 ||
+          Math.hypot(wx - prompt.x, wy - (prompt.y - 50)) < 58)
+      ) {
         triggerInteraction(prompt);
         return;
       }
@@ -1728,7 +2196,15 @@ export function Origin70sIsland({
         }
       } else {
         const sub = SUB_AREAS[curArea];
-        if (isWalkableInSubArea(sub, wx, wy)) {
+        if (
+          isWalkableInSubArea(
+            sub,
+            wx,
+            wy,
+            st.progressState.rpg.calmedCreatureIds,
+            st.allUnlocked
+          )
+        ) {
           virtualInputRef.current.clickTarget = { x: wx, y: wy };
         }
       }
@@ -1982,12 +2458,17 @@ export function Origin70sIsland({
             }
           } else {
             const subSpec = SUB_AREAS[curArea];
-            if (isWalkableInSubArea(subSpec, nextX, nextY)) {
+            const calmedIds = st.progressState.rpg.calmedCreatureIds;
+            if (isWalkableInSubArea(subSpec, nextX, nextY, calmedIds, st.allUnlocked)) {
               player.x = nextX;
               player.y = nextY;
-            } else if (isWalkableInSubArea(subSpec, nextX, player.y)) {
+            } else if (
+              isWalkableInSubArea(subSpec, nextX, player.y, calmedIds, st.allUnlocked)
+            ) {
               player.x = nextX;
-            } else if (isWalkableInSubArea(subSpec, player.x, nextY)) {
+            } else if (
+              isWalkableInSubArea(subSpec, player.x, nextY, calmedIds, st.allUnlocked)
+            ) {
               player.y = nextY;
             } else {
               vIn.clickTarget = null;
@@ -2045,11 +2526,28 @@ export function Origin70sIsland({
       }
 
       const targetHolder: { current: InteractivePromptTarget | null } = { current: null };
-      let bestDist = 92;
+      let bestDist = 78;
 
-      const consider = (candidate: InteractivePromptTarget, maxDist = 92) => {
+      const isFacingTarget = (tx: number, ty: number, d: number): boolean => {
+        if (d <= 28) return true;
+        const dx = tx - player.x;
+        const dy = ty - player.y;
+        switch (player.facingDir) {
+          case 'up':
+            return dy <= 14 && Math.abs(dx) <= Math.max(44, Math.abs(dy) * 1.35);
+          case 'down':
+            return dy >= -14 && Math.abs(dx) <= Math.max(44, Math.abs(dy) * 1.35);
+          case 'left':
+            return dx <= 14 && Math.abs(dy) <= Math.max(44, Math.abs(dx) * 1.35);
+          case 'right':
+            return dx >= -14 && Math.abs(dy) <= Math.max(44, Math.abs(dx) * 1.35);
+        }
+      };
+
+      const consider = (candidate: InteractivePromptTarget, maxDist = 74) => {
         const d = Math.hypot(player.x - candidate.x, player.y - candidate.y);
-        if (d < maxDist && d < bestDist) {
+        const clampedMax = Math.min(maxDist, 92);
+        if (d < clampedMax && d < bestDist && isFacingTarget(candidate.x, candidate.y, d)) {
           bestDist = d;
           targetHolder.current = candidate;
         }
@@ -2206,6 +2704,42 @@ export function Origin70sIsland({
             },
             76
           );
+
+          // Escotilla hacia el Laberinto Subterráneo de Señales (Sector 1976 · Breakout)
+          const foundLab =
+            st.progressState.rpg.discoveredSecretIds.includes('secret-laberinto-1976');
+          consider(
+            {
+              kind: 'labyrinth-hatch',
+              id: LABYRINTH_1976_ENTRANCE.id,
+              label: foundLab
+                ? 'Escotilla al Laberinto de Señales · Sector 1976'
+                : LABYRINTH_1976_ENTRANCE.label,
+              actionLabel: 'Descender al Laberinto',
+              x: LABYRINTH_1976_ENTRANCE.x,
+              y: LABYRINTH_1976_ENTRANCE.y + 8,
+              accentHex: '#f97316',
+            },
+            80
+          );
+
+          // Criaturas Guardianas exteriores originales de PIXELVERSE
+          for (const cr of GUARDIAN_CREATURES) {
+            if (cr.areaId !== 'exterior-70s') continue;
+            const calmed = st.progressState.rpg.calmedCreatureIds.includes(cr.id);
+            consider(
+              {
+                kind: 'guardian-creature',
+                id: cr.id,
+                label: calmed ? `${cr.name} · Armonizado` : cr.name,
+                actionLabel: cr.dormantPrompt,
+                x: cr.x,
+                y: cr.y + 6,
+                accentHex: cr.accentHex,
+              },
+              82
+            );
+          }
 
           // Navío Astral rumbo a Isla Neón 1980s
           const ferryReady =
@@ -2470,7 +3004,7 @@ export function Origin70sIsland({
           allUnlocked: st.allUnlocked,
           progressState: st.progressState,
           activeZoneId: activeRect ? activeRect.zoneId : null,
-          prompt: nearbyPromptRef.current,
+          prompt: st.modalOpen ? null : nearbyPromptRef.current,
           scannerPulse: scannerPulseRef.current,
         });
       } else {
@@ -2547,6 +3081,126 @@ export function Origin70sIsland({
           );
         }
 
+        for (const cr of GUARDIAN_CREATURES) {
+          if (cr.areaId !== curArea) continue;
+          const calmed = st.progressState.rpg.calmedCreatureIds.includes(cr.id);
+          consider(
+            {
+              kind: 'guardian-creature',
+              id: cr.id,
+              label: calmed ? `${cr.name} · Corredor Despejado` : cr.name,
+              actionLabel: calmed ? 'Conversar Frecuencia' : cr.dormantPrompt,
+              x: cr.x,
+              y: cr.y,
+              accentHex: cr.accentHex,
+            },
+            80
+          );
+        }
+
+        if (curArea === 'dungeon-laberinto-origen') {
+          const doorOpen =
+            st.allUnlocked ||
+            st.progressState.rpg.solvedPuzzleIds.includes(LABYRINTH_SECRET_DOOR.puzzleId);
+          consider(
+            {
+              kind: 'labyrinth-secret-door',
+              id: LABYRINTH_SECRET_DOOR.id,
+              label: doorOpen
+                ? 'Compuerta Abierta · Sala Secreta de Breakout (1976)'
+                : LABYRINTH_SECRET_DOOR.label,
+              actionLabel: doorOpen ? 'Entrar a Sala 1976' : 'Inspeccionar Compuerta',
+              x: LABYRINTH_SECRET_DOOR.x,
+              y: LABYRINTH_SECRET_DOOR.y + 12,
+              accentHex: doorOpen ? '#34d399' : '#f97316',
+            },
+            76
+          );
+
+          for (const pillar of LABYRINTH_RGB_PILLARS) {
+            const lit =
+              doorOpen || activeRgbPillarsRef.current.includes(pillar.stepOrder);
+            consider(
+              {
+                kind: 'rgb-pillar',
+                id: pillar.id,
+                label: pillar.bandName,
+                actionLabel: lit ? 'Frecuencia Activa' : 'Sintonizar Pilar',
+                x: pillar.x,
+                y: pillar.y,
+                accentHex: pillar.colorHex,
+              },
+              66
+            );
+          }
+        }
+
+        if (curArea === 'secret-sala-breakout') {
+          consider(
+            {
+              kind: 'breakout-cabinet',
+              id: 'cabinet-breakout-1976',
+              label: st.breakoutRestored
+                ? 'Gabinete Secreto Breakout (1976) · Memoria Restaurada'
+                : `Gabinete Prototipo Breakout (1976) · Meta ${BREAKOUT_UNLOCK_SCORE} PTS`,
+              actionLabel: st.breakoutRestored
+                ? 'Rejugar Breakout (1976)'
+                : 'Encender Breakout (1976)',
+              x: BREAKOUT_CABINET_INTERACT.x,
+              y: BREAKOUT_CABINET_INTERACT.y,
+              accentHex: '#f97316',
+            },
+            88
+          );
+        }
+
+        if (curArea === 'interior-museo-viviente') {
+          for (const spot of MUSEUM_PEDESTAL_SPOTS) {
+            const exhibit = MUSEUM_1970S_EXHIBITS.find((e) => e.id === spot.exhibitId);
+            if (!exhibit) continue;
+            const isEncrypted =
+              exhibit.id === 'exhibit-breakout-1976' &&
+              !st.breakoutRestored &&
+              !st.progressState.rpg.discoveredSecretIds.includes(
+                'secret-sala-breakout-1976'
+              );
+            consider(
+              {
+                kind: 'museum-pedestal',
+                id: exhibit.id,
+                label: isEncrypted
+                  ? 'Pedestal 1976 · Vitrina Cifrada'
+                  : `${exhibit.year} · ${exhibit.title} (${
+                      exhibit.mode === 'playable' ? 'Jugable' : 'Exhibición'
+                    })`,
+                actionLabel: 'Inspeccionar Vitrina',
+                x: spot.x,
+                y: spot.y + 8,
+                accentHex: exhibit.accentHex,
+              },
+              66
+            );
+          }
+
+          const vecSolved =
+            st.allUnlocked ||
+            st.progressState.rpg.solvedPuzzleIds.includes(MUSEUM_VECTOR_CONSOLE.puzzleId);
+          consider(
+            {
+              kind: 'vector-console',
+              id: MUSEUM_VECTOR_CONSOLE.id,
+              label: vecSolved
+                ? `${MUSEUM_VECTOR_CONSOLE.label} · Alineado`
+                : MUSEUM_VECTOR_CONSOLE.label,
+              actionLabel: vecSolved ? 'Ver Haz XY' : 'Calibrar Haces XY',
+              x: MUSEUM_VECTOR_CONSOLE.x,
+              y: MUSEUM_VECTOR_CONSOLE.y + 8,
+              accentHex: '#a78bfa',
+            },
+            72
+          );
+        }
+
         if (curArea === 'interior-cronoscopio') {
           const tm = evaluateTimeMachineStatus(st.progressState, st.allUnlocked);
           consider(
@@ -2620,8 +3274,9 @@ export function Origin70sIsland({
           progressState: st.progressState,
           allUnlocked: st.allUnlocked,
           steppedTileOrder: steppedTilesRef.current,
+          activeRgbPillars: activeRgbPillarsRef.current,
           pickupBursts,
-          prompt: nearbyPromptRef.current,
+          prompt: st.modalOpen ? null : nearbyPromptRef.current,
           scannerPulse: scannerPulseRef.current,
         });
       }
@@ -2649,18 +3304,12 @@ export function Origin70sIsland({
   const currentZone = ISLAND_ZONES[currentZoneId];
   const activeSubArea = activeAreaId !== 'exterior-70s' ? SUB_AREAS[activeAreaId] : null;
   const collectedDiamondsCount = progressState.island70s.collectedDiamondIds.length;
-  const restored70sCount =
-    (pongRestored ? 1 : 0) + (glitchTrailCleared ? 1 : 0) + (invadersRestored ? 1 : 0);
-
-  const hasLanternUnlocked =
-    allUnlocked ||
-    progressState.island70s.abilitiesUnlocked.includes('phosphor-lantern') ||
-    progressState.rpg.inventoryItems.includes('item-lampara-fosforo');
-
-  const hasScannerUnlocked =
-    allUnlocked ||
-    progressState.island70s.abilitiesUnlocked.includes('secret-scanner') ||
-    progressState.rpg.inventoryItems.includes('item-escaner-frecuencias');
+  const restoredArcadesCount =
+    (pongRestored ? 1 : 0) +
+    (breakoutRestored ? 1 : 0) +
+    (glitchTrailCleared ? 1 : 0) +
+    (invadersRestored ? 1 : 0) +
+    (dkRestored ? 1 : 0);
 
   const completedQuestsCount = RPG_QUESTS.filter(
     (q) =>
@@ -2681,6 +3330,21 @@ export function Origin70sIsland({
       : !invadersRestored
       ? `Cruza el Puente Astral hacia La Fortaleza y alcanza ${SPACE_INVADERS_UNLOCK_SCORE} PTS en Space Invaders`
       : '¡Puerto Este abierto! Zarpa hacia la Isla Neón 1980s o descubre las salas secretas [Q]';
+
+  const eraBadgeText =
+    activeAreaId === 'island-80s'
+      ? 'ISLA 1980s'
+      : `ISLA DEL ORIGEN · ${progressState.island70s.visitedZones.length}/9 ZONAS`;
+
+  const currentLocationName = activeSubArea
+    ? activeSubArea.name
+    : zoneBanner
+    ? `${zoneBanner.numberLabel} · ${zoneBanner.name}`
+    : currentZone.name;
+
+  const currentLocationSubtitle = activeSubArea
+    ? activeSubArea.subtitle
+    : currentZone.subtitle;
 
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none bg-[#020614]">
@@ -2714,308 +3378,147 @@ export function Origin70sIsland({
         </div>
       )}
 
-      {/* HUD Superior Izquierdo Estilo Game Boy Color: Isla del Origen, Zona, Logros y Menús */}
-      <div
-        className={`absolute ${
-          allUnlocked ? 'top-14' : 'top-3.5'
-        } left-3.5 z-20 max-w-md gbc-hud-frame px-3.5 py-2.5 space-y-2`}
-      >
-        <div className="flex items-center justify-between gap-2 border-b border-white/20 pb-1">
-          <span className="text-[10px] font-mono-tabular font-bold tracking-wider text-[#fde047] uppercase truncate">
-            {activeSubArea
-              ? activeSubArea.numberLabel
-              : currentZone.macroRegionTitle}
-          </span>
-          <span className="text-[10px] font-mono-tabular font-bold text-[#7dd3fc] whitespace-nowrap shrink-0">
-            {activeAreaId === 'island-80s'
-              ? 'ISLA 1980s'
-              : `ISLA DEL ORIGEN · ${progressState.island70s.visitedZones.length}/9`}
-          </span>
-        </div>
-
-        <div>
-          <p className="font-mono text-sm sm:text-base font-bold text-white leading-tight">
-            {activeSubArea
-              ? activeSubArea.name
-              : zoneBanner
-              ? `${zoneBanner.numberLabel} · ${zoneBanner.name}`
-              : currentZone.name}
-          </p>
-          <p className="text-[11px] text-slate-200 font-mono leading-snug line-clamp-2">
-            {activeSubArea ? activeSubArea.subtitle : currentZone.subtitle}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5 pt-1 border-t border-white/20 text-[10px] font-mono-tabular font-bold">
-          <span className="inline-flex items-center gap-1 text-[#7dd3fc]">
-            <Diamond className="w-3 h-3 shrink-0" />
-            <span>
-              {collectedDiamondsCount}/{TOTAL_70S_DIAMONDS}
+      {/* Minimapa GBC oculto por defecto; solo se muestra al pulsar [Tab] o desde [I] */}
+      {activeAreaId === 'exterior-70s' && minimapOpen && (
+        <div className="absolute bottom-3.5 right-3.5 z-20 gbc-hud-frame p-2 w-60 space-y-1.5">
+          <div className="flex items-center justify-between text-[9px] font-mono-tabular font-bold text-[#fde047] px-0.5">
+            <span className="inline-flex items-center gap-1">
+              <MapIcon className="w-3 h-3 text-[#fde047]" />
+              <span>MAPA · ISLA DEL ORIGEN</span>
             </span>
-          </span>
-          <span className="inline-flex items-center gap-1 text-[#fde047]">
-            <Sparkles className="w-3 h-3 shrink-0" />
-            <span>ARC {restored70sCount}/3</span>
-          </span>
-          <span className="inline-flex items-center gap-1 text-[#86efac]">
-            <ScrollText className="w-3 h-3 shrink-0" />
-            <span>
-              MIS {completedQuestsCount}/{RPG_QUESTS.length}
-            </span>
-          </span>
-          {(invadersRestored ||
-            progressState.rpg.achievementsUnlocked.includes('invaders-1000-pts')) && (
-            <span
-              title="Logro permanente: 1.000 PTS alcanzados en Space Invaders"
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#14532d] border border-[#86efac] text-[#bbf7d0]"
-            >
-              <Award className="w-3 h-3 shrink-0 text-[#fde047]" />
-              <span>1000 PTS</span>
-            </span>
-          )}
-        </div>
-
-        {/* Barra de menús y herramientas GBC */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-white/20">
-          <button
-            type="button"
-            onClick={() => {
-              retroAudio.uiClick();
-              setInventoryOpen(true);
-            }}
-            className="gbc-menu-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono-tabular font-bold text-[#fef08a] hover:text-white cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <Backpack className="w-3 h-3 shrink-0" />
-            <span>Mochila [I]</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              retroAudio.uiClick();
-              setQuestsOpen(true);
-            }}
-            className="gbc-menu-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono-tabular font-bold text-[#86efac] hover:text-white cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <ScrollText className="w-3 h-3 shrink-0" />
-            <span>Misiones [Q]</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              retroAudio.uiClick();
-              setCodexOpen(true);
-            }}
-            className="gbc-menu-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono-tabular font-bold text-[#7dd3fc] hover:text-white cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <BookOpen className="w-3 h-3 shrink-0" />
-            <span>Códice [C]</span>
-          </button>
-
-          {activeAreaId === 'exterior-70s' && (
             <button
               type="button"
               onClick={() => {
-                const px = playerPosBridgeRef.current.x;
-                const py = playerPosBridgeRef.current.y;
-                callbacksRef.current.onManualSave(px, py);
-                retroAudio.saveJingle();
-                showToast('Partida guardada en la memoria GBC · Posición e inventario asegurados.');
+                retroAudio.uiClick();
+                setMinimapOpen(false);
               }}
-              title="Guardar partida rápidamente en el cartucho GBC"
-              className="gbc-menu-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono-tabular font-bold text-[#f8fafc] hover:text-[#fde047] cursor-pointer whitespace-nowrap shrink-0"
+              className="text-white hover:text-[#fde047] cursor-pointer font-bold"
             >
-              <Save className="w-3 h-3 shrink-0 text-[#38bdf8]" />
-              <span>Guardar</span>
+              [Tab / X]
             </button>
-          )}
-
-          {hasLanternUnlocked && (
-            <button
-              type="button"
-              onClick={handleToggleLanternAction}
-              title="Encender o apagar Lámpara de Fósforo [L]"
-              className={`gbc-menu-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono-tabular font-bold cursor-pointer whitespace-nowrap shrink-0 ${
-                progressState.rpg.lanternActive
-                  ? 'text-[#fde047] !bg-[#78350f]'
-                  : 'text-slate-200 hover:text-white'
-              }`}
-            >
-              <Flame className="w-3 h-3 shrink-0" />
-              <span>Luz [L]</span>
-            </button>
-          )}
-
-          {hasScannerUnlocked && (
-            <button
-              type="button"
-              onClick={handleUseScannerPulse}
-              title="Emitir pulso del Escáner de Secretos [R]"
-              className="gbc-menu-btn inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono-tabular font-bold text-[#67e8f9] hover:text-white cursor-pointer whitespace-nowrap shrink-0"
-            >
-              <Radio className="w-3 h-3 shrink-0" />
-              <span>Sonar [R]</span>
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-start gap-1.5 pt-1 border-t border-white/20 text-[10px] text-[#e0f2fe] font-mono pointer-events-none">
-          <Compass className="w-3.5 h-3.5 text-[#fde047] shrink-0 mt-0.5" />
-          <span>{currentObjectiveText}</span>
-        </div>
-      </div>
-
-      {/* Minimapa GBC conmutable en esquina inferior derecha (Isla del Origen) */}
-      {activeAreaId === 'exterior-70s' && (
-        <div className="absolute bottom-3.5 right-3.5 z-20 flex flex-col items-end gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              retroAudio.uiClick();
-              setMinimapOpen((o) => !o);
-            }}
-            className="gbc-menu-btn px-2.5 py-1 text-[10px] font-mono-tabular font-bold text-white inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <MapIcon className="w-3.5 h-3.5 text-[#fde047]" />
-            <span>{minimapOpen ? 'Ocultar Mapa [Tab]' : 'Mapa Isla [Tab]'}</span>
-          </button>
-
-          {minimapOpen && (
-            <div className="gbc-hud-frame p-2 w-60 space-y-1.5">
-              <div className="flex items-center justify-between text-[9px] font-mono-tabular font-bold text-[#fde047] px-0.5">
-                <span>MAPA · ISLA DEL ORIGEN</span>
-                <span>5 REGIONES</span>
-              </div>
-              <div className="relative w-full h-36 bg-[#134e6f] border-2 border-[#070b14] overflow-hidden">
-                {ISLAND_WALKABLE_RECTS.map((r) => {
-                  if (r.requiresCondition === 'south-shortcut' && !southShortcutActive) {
-                    return null;
-                  }
-                  if (r.requiresCondition === 'garganta-bridge' && !glitchTrailCleared) {
-                    return null;
-                  }
-                  const zBiome = ISLAND_ZONES[r.zoneId]?.biome ?? 'meadow';
-                  const rectColor =
-                    r.surface === 'bridge'
-                      ? 'bg-[#b45309]'
-                      : r.zoneId === 'cavernas-codigo'
-                      ? 'bg-[#6b21a8]'
-                      : zBiome === 'volcanic'
-                      ? 'bg-[#7f1d1d]'
-                      : zBiome === 'forest'
-                      ? 'bg-[#15803d]'
-                      : zBiome === 'coast'
-                      ? 'bg-[#eab308]'
-                      : zBiome === 'village'
-                      ? 'bg-[#cbd5e1]'
-                      : 'bg-[#4ade80]';
-                  return (
-                    <div
-                      key={r.id}
-                      style={{
-                        left: `${(r.x / ISLAND_WORLD_W) * 100}%`,
-                        top: `${(r.y / ISLAND_WORLD_H) * 100}%`,
-                        width: `${(r.w / ISLAND_WORLD_W) * 100}%`,
-                        height: `${(r.h / ISLAND_WORLD_H) * 100}%`,
-                      }}
-                      className={`absolute ${rectColor}`}
-                    />
-                  );
-                })}
-
-                <div
-                  title="Punto de Guardado · El Pueblo del Origen"
-                  style={{
-                    left: `${(VILLAGE_SAVE_TERMINAL.x / ISLAND_WORLD_W) * 100}%`,
-                    top: `${(VILLAGE_SAVE_TERMINAL.y / ISLAND_WORLD_H) * 100}%`,
-                  }}
-                  className="absolute w-2 h-2 -translate-x-1/2 -translate-y-1/2 bg-[#38bdf8] border border-black"
-                />
-                <div
-                  title="Zona 2 · Las Praderas del Pixel · Pong (1972)"
-                  style={{
-                    left: `${(ISLAND_KEY_COORDS.pongCabinet.x / ISLAND_WORLD_W) * 100}%`,
-                    top: `${(ISLAND_KEY_COORDS.pongCabinet.y / ISLAND_WORLD_H) * 100}%`,
-                  }}
-                  className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#fde047] border border-black"
-                />
-                <div
-                  title="El Sendero del Glitch Perdido"
-                  style={{
-                    left: `${(ISLAND_KEY_COORDS.glitchTrailPortal.x / ISLAND_WORLD_W) * 100}%`,
-                    top: `${(ISLAND_KEY_COORDS.glitchTrailPortal.y / ISLAND_WORLD_H) * 100}%`,
-                  }}
-                  className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#00f3ff] border border-black"
-                />
-                <div
-                  title="Zona 4 · La Fortaleza Volcánica · Space Invaders (1978)"
-                  style={{
-                    left: `${(ISLAND_KEY_COORDS.invadersCabinet.x / ISLAND_WORLD_W) * 100}%`,
-                    top: `${(ISLAND_KEY_COORDS.invadersCabinet.y / ISLAND_WORLD_H) * 100}%`,
-                  }}
-                  className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#ef4444] border border-black"
-                />
-                <div
-                  title="Observatorio del Cronoscopio · Máquina del Tiempo"
-                  style={{
-                    left: `${(2150 / ISLAND_WORLD_W) * 100}%`,
-                    top: `${(1140 / ISLAND_WORLD_H) * 100}%`,
-                  }}
-                  className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#c084fc] border border-black"
-                />
-                <div
-                  title="Muelle y Costa de las Máquinas Olvidadas · Ruta 1980s"
-                  style={{
-                    left: `${(HARBOR_80S_FERRY.x / ISLAND_WORLD_W) * 100}%`,
-                    top: `${(HARBOR_80S_FERRY.y / ISLAND_WORLD_H) * 100}%`,
-                  }}
-                  className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#f472b6] border border-black"
-                />
-
-                <div
-                  style={{
-                    left: `${(playerMiniPos.x / ISLAND_WORLD_W) * 100}%`,
-                    top: `${(playerMiniPos.y / ISLAND_WORLD_H) * 100}%`,
-                  }}
-                  className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-white border-2 border-[#070b14]"
-                />
-              </div>
-
-              <div className="flex items-center justify-between text-[9px] font-mono-tabular text-slate-200 px-0.5">
-                <span>WASD / Clic · 4 Dir</span>
-                <span>Shift · Correr</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Notificación flotante GBC de hallazgo o vuelo */}
-      {(toastBanner || flightStatusText) && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 gbc-hud-frame px-4 py-2 text-xs font-mono font-bold text-[#fde047] text-center max-w-xl">
-          {flightStatusText || toastBanner}
-        </div>
-      )}
-
-      {/* Barra contextual inferior estilo menú GBC */}
-      {nearbyPrompt && !anyModalOpen && !flightStatusText && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 gbc-hud-frame px-4 py-2.5 flex flex-wrap items-center justify-center gap-3 max-w-xl">
-          <div className="text-left min-w-0">
-            <p className="text-[9px] font-mono-tabular font-bold tracking-wider text-[#fde047] uppercase">
-              ▶ OBJETO / LUGAR CERCANO
-            </p>
-            <p className="text-xs font-mono font-bold text-white truncate">
-              {nearbyPrompt.label}
-            </p>
           </div>
-          <button
-            type="button"
-            onClick={() => triggerInteraction(nearbyPrompt)}
-            className="gbc-menu-btn px-3.5 py-1.5 text-xs font-mono font-bold tracking-wider text-[#fde047] hover:text-white cursor-pointer whitespace-nowrap shrink-0"
-          >
-            ▶ {nearbyPrompt.actionLabel} [E]
-          </button>
+          <div className="relative w-full h-36 bg-[#134e6f] border-2 border-[#070b14] overflow-hidden">
+            {ISLAND_WALKABLE_RECTS.map((r) => {
+              if (r.requiresCondition === 'south-shortcut' && !southShortcutActive) {
+                return null;
+              }
+              if (r.requiresCondition === 'garganta-bridge' && !glitchTrailCleared) {
+                return null;
+              }
+              const zBiome = ISLAND_ZONES[r.zoneId]?.biome ?? 'meadow';
+              const rectColor =
+                r.surface === 'bridge'
+                  ? 'bg-[#b45309]'
+                  : r.zoneId === 'cavernas-codigo'
+                  ? 'bg-[#6b21a8]'
+                  : zBiome === 'volcanic'
+                  ? 'bg-[#7f1d1d]'
+                  : zBiome === 'forest'
+                  ? 'bg-[#15803d]'
+                  : zBiome === 'coast'
+                  ? 'bg-[#eab308]'
+                  : zBiome === 'village'
+                  ? 'bg-[#cbd5e1]'
+                  : 'bg-[#4ade80]';
+              return (
+                <div
+                  key={r.id}
+                  style={{
+                    left: `${(r.x / ISLAND_WORLD_W) * 100}%`,
+                    top: `${(r.y / ISLAND_WORLD_H) * 100}%`,
+                    width: `${(r.w / ISLAND_WORLD_W) * 100}%`,
+                    height: `${(r.h / ISLAND_WORLD_H) * 100}%`,
+                  }}
+                  className={`absolute ${rectColor}`}
+                />
+              );
+            })}
+
+            <div
+              title="Punto de Guardado · El Pueblo del Origen"
+              style={{
+                left: `${(VILLAGE_SAVE_TERMINAL.x / ISLAND_WORLD_W) * 100}%`,
+                top: `${(VILLAGE_SAVE_TERMINAL.y / ISLAND_WORLD_H) * 100}%`,
+              }}
+              className="absolute w-2 h-2 -translate-x-1/2 -translate-y-1/2 bg-[#38bdf8] border border-black"
+            />
+            <div
+              title="Zona 2 · Las Praderas del Pixel · Pong (1972)"
+              style={{
+                left: `${(ISLAND_KEY_COORDS.pongCabinet.x / ISLAND_WORLD_W) * 100}%`,
+                top: `${(ISLAND_KEY_COORDS.pongCabinet.y / ISLAND_WORLD_H) * 100}%`,
+              }}
+              className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#fde047] border border-black"
+            />
+            <div
+              title="El Sendero del Glitch Perdido"
+              style={{
+                left: `${(ISLAND_KEY_COORDS.glitchTrailPortal.x / ISLAND_WORLD_W) * 100}%`,
+                top: `${(ISLAND_KEY_COORDS.glitchTrailPortal.y / ISLAND_WORLD_H) * 100}%`,
+              }}
+              className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#00f3ff] border border-black"
+            />
+            <div
+              title="Zona 4 · La Fortaleza Volcánica · Space Invaders (1978)"
+              style={{
+                left: `${(ISLAND_KEY_COORDS.invadersCabinet.x / ISLAND_WORLD_W) * 100}%`,
+                top: `${(ISLAND_KEY_COORDS.invadersCabinet.y / ISLAND_WORLD_H) * 100}%`,
+              }}
+              className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#ef4444] border border-black"
+            />
+            <div
+              title="Observatorio del Cronoscopio · Máquina del Tiempo"
+              style={{
+                left: `${(2150 / ISLAND_WORLD_W) * 100}%`,
+                top: `${(1140 / ISLAND_WORLD_H) * 100}%`,
+              }}
+              className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#c084fc] border border-black"
+            />
+            <div
+              title="Museo Viviente de los 70 · Galería 1971–1979"
+              style={{
+                left: `${(1648 / ISLAND_WORLD_W) * 100}%`,
+                top: `${(1012 / ISLAND_WORLD_H) * 100}%`,
+              }}
+              className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#22d3ee] border border-black"
+            />
+            <div
+              title="Escotilla Laberinto 1976 · Breakout Secreto"
+              style={{
+                left: `${(LABYRINTH_1976_ENTRANCE.x / ISLAND_WORLD_W) * 100}%`,
+                top: `${(LABYRINTH_1976_ENTRANCE.y / ISLAND_WORLD_H) * 100}%`,
+              }}
+              className="absolute w-2 h-2 -translate-x-1/2 -translate-y-1/2 bg-[#f97316] border border-black"
+            />
+            <div
+              title="Muelle y Costa de las Máquinas Olvidadas · Ruta 1980s"
+              style={{
+                left: `${(HARBOR_80S_FERRY.x / ISLAND_WORLD_W) * 100}%`,
+                top: `${(HARBOR_80S_FERRY.y / ISLAND_WORLD_H) * 100}%`,
+              }}
+              className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-[#f472b6] border border-black"
+            />
+
+            <div
+              style={{
+                left: `${(playerMiniPos.x / ISLAND_WORLD_W) * 100}%`,
+                top: `${(playerMiniPos.y / ISLAND_WORLD_H) * 100}%`,
+              }}
+              className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 bg-white border-2 border-[#070b14]"
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-[9px] font-mono-tabular text-slate-200 px-0.5">
+            <span>WASD / Clic · 4 Dir</span>
+            <span>Shift · Correr</span>
+          </div>
+        </div>
+      )}
+
+      {/* Notificación efímera de hallazgo o vuelo */}
+      {(toastBanner || flightStatusText) && (
+        <div className="pointer-events-none absolute top-5 left-1/2 -translate-x-1/2 z-30 gbc-hud-frame px-4 py-2 text-xs font-mono font-bold text-[#fde047] text-center max-w-xl">
+          {flightStatusText || toastBanner}
         </div>
       )}
 
@@ -3059,8 +3562,16 @@ export function Origin70sIsland({
               </p>
             )}
 
-            <div className="flex justify-end pt-2 items-center gap-2">
-              <span className="text-[#f2c94c] text-xs font-mono animate-pulse">▼</span>
+            <div className="flex flex-wrap justify-end pt-2 items-center gap-2">
+              {activeDialog.primaryAction && (
+                <button
+                  type="button"
+                  onClick={activeDialog.primaryAction.onSelect}
+                  className="bg-[#0284c7] hover:bg-[#0ea5e9] text-white border-2 border-white px-4 py-1.5 font-mono font-bold text-xs uppercase tracking-wider cursor-pointer shadow-[2px_2px_0px_#000000] whitespace-nowrap shrink-0"
+                >
+                  {activeDialog.primaryAction.label}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -3076,11 +3587,162 @@ export function Origin70sIsland({
         </div>
       )}
 
-      {/* Inventario Funcional y Habilidades [I] */}
+      {/* Consola de Alineación Vectorial QuadraScan XY (Museo Viviente 1979) */}
+      {vectorModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Proyector Vectorial QuadraScan XY"
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+        >
+          <div className="gbc-retro-box max-w-lg w-full p-5 sm:p-6 space-y-4 font-mono">
+            <div className="flex items-start justify-between gap-3 border-b-2 border-dashed border-white/25 pb-2.5">
+              <div>
+                <p className="text-[10px] tracking-widest text-[#a78bfa] uppercase">
+                  ACERTIJO VECTORIAL · FRONTERA 1979
+                </p>
+                <h3 className="text-base sm:text-lg font-bold text-white mt-0.5">
+                  Proyector QuadraScan XY
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVectorModalOpen(false)}
+                className="text-white hover:text-amber-300 cursor-pointer font-bold px-2 py-1"
+              >
+                [X]
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-200 leading-relaxed">
+              Calibra los tres haces de electrones para desbloquear el Vitrinario Vectorial de 1979. Observa la geometría de Vectra-79 en Las Cavernas de Memoria si necesitas conocer los tres ángulos exactos.
+            </p>
+
+            <div className="grid grid-cols-3 gap-3 py-2">
+              {(['Haz Alfa (X)', 'Haz Beta (Y)', 'Haz Impulso'] as const).map(
+                (axisName, idx) => {
+                  const val = vectorAngles[idx];
+                  return (
+                    <div
+                      key={axisName}
+                      className="border-2 border-white/25 bg-[#050918] p-3 text-center space-y-2"
+                    >
+                      <span className="block text-[10px] text-slate-400">{axisName}</span>
+                      <span className="block text-xl font-bold text-[#22d3ee] font-mono-tabular">
+                        {val}°
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const steps = [0, 45, 90, 135, 180];
+                          const nextVal =
+                            steps[(steps.indexOf(val) + 1) % steps.length];
+                          retroAudio.puzzleNodeTone(idx + 1);
+                          setVectorAngles((prev) => {
+                            const copy = [...prev] as [number, number, number];
+                            copy[idx] = nextVal;
+                            return copy;
+                          });
+                        }}
+                        className="w-full py-1.5 px-2 border border-white/40 bg-cyan-950/60 hover:bg-cyan-900 text-xs text-white cursor-pointer"
+                      >
+                        Rotar +45°
+                      </button>
+                    </div>
+                  );
+                }
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/15">
+              <button
+                type="button"
+                onClick={() => setVectorModalOpen(false)}
+                className="px-3.5 py-1.5 border border-white/30 bg-black/50 text-xs text-slate-200 hover:text-white cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const [t0, t1, t2] = MUSEUM_VECTOR_CONSOLE.targetAngles;
+                  if (
+                    vectorAngles[0] === t0 &&
+                    vectorAngles[1] === t1 &&
+                    vectorAngles[2] === t2
+                  ) {
+                    retroAudio.secretFound();
+                    callbacksRef.current.onSolvePuzzle(MUSEUM_VECTOR_CONSOLE.puzzleId);
+                    setVectorModalOpen(false);
+                    showToast(
+                      '¡Alineación Vectorial 45° · 90° · 180° perfecta! El Vitrinario central del Museo se ha desbloqueado.'
+                    );
+                  } else {
+                    retroAudio.npcBlip(0.68);
+                    showToast(
+                      'Los haces XY aún no convergen · Revisa los ángulos de Vectra-79 en Las Cavernas de Memoria.'
+                    );
+                  }
+                }}
+                className="px-4 py-1.5 border-2 border-white bg-[#0284c7] hover:bg-[#0ea5e9] text-xs font-bold text-white cursor-pointer"
+              >
+                Verificar Alineación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inventario Flotante y Estadísticas [I] */}
       {inventoryOpen && (
         <RpgInventoryModal
           progressState={progressState}
           allUnlocked={allUnlocked}
+          areaInfo={{
+            eraBadge: eraBadgeText,
+            zoneName: currentLocationName,
+            zoneSubtitle: currentLocationSubtitle,
+            objectiveText: currentObjectiveText,
+          }}
+          statsSummary={{
+            diamondsCollected: collectedDiamondsCount,
+            diamondsTotal: TOTAL_70S_DIAMONDS,
+            arcadesRestored: restoredArcadesCount,
+            arcadesTotal: 5,
+            chestsOpened: progressState.rpg.openedChestIds.length,
+            chestsTotal: RPG_CHESTS.length,
+            questsCompleted: completedQuestsCount,
+            questsTotal: RPG_QUESTS.length,
+            secretsFound: progressState.rpg.discoveredSecretIds.length,
+          }}
+          quickControls={{
+            canSaveHere: true,
+            onQuickSave: () => {
+              const savedAreaLabel = performIslandManualSave();
+              retroAudio.saveJingle();
+              setInventoryOpen(false);
+              showToast(`Partida guardada (${savedAreaLabel}) · Progreso e inventario asegurados.`);
+            },
+            onOpenQuests: () => {
+              setInventoryOpen(false);
+              setQuestsOpen(true);
+            },
+            onOpenCodex: () => {
+              setInventoryOpen(false);
+              setCodexOpen(true);
+            },
+            canToggleMinimap: activeAreaId === 'exterior-70s',
+            minimapOpen,
+            onToggleMinimap: () => {
+              setMinimapOpen((prev) => !prev);
+              setInventoryOpen(false);
+            },
+            isGbGreenMode,
+            onToggleGbGreenMode,
+            isAudioMuted,
+            onToggleAudio,
+            onOpenLevelSelector,
+          }}
           onClose={() => setInventoryOpen(false)}
           onUseScanner={handleUseScannerPulse}
           onToggleLantern={handleToggleLanternAction}
@@ -3091,11 +3753,14 @@ export function Origin70sIsland({
         />
       )}
 
-      {/* Diario de Misiones [Q] */}
+      {/* Diario de Misiones e Investigación [Q] */}
       {questsOpen && (
         <RpgQuestsModal
           progressState={progressState}
           allUnlocked={allUnlocked}
+          onSolveCase={(caseId, rewardItemIds) => {
+            callbacksRef.current.onSolveCase(caseId, rewardItemIds);
+          }}
           onClose={() => setQuestsOpen(false)}
         />
       )}

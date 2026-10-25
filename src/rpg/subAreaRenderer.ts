@@ -8,15 +8,20 @@
  */
 
 import {
+  drawGuardianCreatureSprite,
   drawPixelAvatar4Dir,
   drawRpgTreasureChest,
   IslandPickupBurst,
   IslandPromptRenderSpec,
 } from '../island/island70sRenderer';
+import { MUSEUM_1970S_EXHIBITS } from '../memories/historicalCatalog';
 import { PixelverseProgressState } from '../memories/progressionState';
 import {
   evaluateTimeMachineStatus,
   FacingDirection,
+  GUARDIAN_CREATURES,
+  LABYRINTH_RGB_PILLARS,
+  LABYRINTH_SECRET_DOOR,
   RPG_CHESTS,
   RPG_EXAMINABLES,
   RPG_SUBAREA_NPCS,
@@ -44,6 +49,7 @@ export interface SubAreaRenderParams {
   progressState: PixelverseProgressState;
   allUnlocked: boolean;
   steppedTileOrder: number[];
+  activeRgbPillars?: number[];
   pickupBursts: IslandPickupBurst[];
   prompt: IslandPromptRenderSpec | null;
   scannerPulse: { active: boolean; elapsed: number };
@@ -64,6 +70,7 @@ export function renderSubAreaFrame(params: SubAreaRenderParams): void {
     progressState,
     allUnlocked,
     steppedTileOrder,
+    activeRgbPillars = [],
     pickupBursts,
     prompt,
     scannerPulse,
@@ -185,6 +192,26 @@ export function renderSubAreaFrame(params: SubAreaRenderParams): void {
       const drop = reducedMotion ? i * 4 : ((elapsed * 45 + i * 9) % 20);
       ctx.fillRect(356 + i * 16, wb.y + wb.h - 6 + drop, 4, 6);
     }
+    ctx.restore();
+  }
+
+  // Compuerta Norte hacia la Sala Secreta de Breakout (1976) en el Laberinto de Señales
+  if (area.id === 'dungeon-laberinto-origen') {
+    const rgbSolved =
+      allUnlocked ||
+      progressState.rpg.solvedPuzzleIds.includes(LABYRINTH_SECRET_DOOR.puzzleId);
+    const dx = LABYRINTH_SECRET_DOOR.x;
+    const dy = wb.y - 34;
+    ctx.save();
+    ctx.fillStyle = rgbSolved ? '#04121f' : '#1e1324';
+    ctx.fillRect(dx - 26, dy, 52, 36);
+    ctx.strokeStyle = rgbSolved ? '#22d3ee' : '#f97316';
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(dx - 26, dy, 52, 36);
+    ctx.fillStyle = rgbSolved ? '#22d3ee' : '#fb923c';
+    ctx.font = '700 8px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(rgbSolved ? '1976 ↑' : 'SELLADO', dx, dy + 21);
     ctx.restore();
   }
 
@@ -479,6 +506,215 @@ export function renderSubAreaFrame(params: SubAreaRenderParams): void {
         cx,
         prop.y - 6
       );
+    } else if (prop.kind === 'labyrinth-wall') {
+      // Muro biselado basáltico-cobre con traza luminosa en el Laberinto de Señales
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(prop.x + 4, prop.y + 6, prop.w, prop.h);
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(prop.x - 2, prop.y - 2, prop.w + 4, prop.h + 4);
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(prop.x, prop.y, prop.w, prop.h);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(prop.x + 2, prop.y + 2, prop.w - 4, 8);
+      ctx.fillStyle = prop.accentHex;
+      ctx.globalAlpha = 0.65;
+      if (prop.h > prop.w) {
+        ctx.fillRect(prop.x + Math.floor(prop.w / 2) - 1, prop.y + 12, 2, prop.h - 24);
+      } else {
+        ctx.fillRect(prop.x + 12, prop.y + Math.floor(prop.h / 2) - 1, prop.w - 24, 2);
+      }
+      ctx.globalAlpha = 1;
+    } else if (prop.kind === 'rgb-frequency-pillar') {
+      const rgbSolved =
+        allUnlocked ||
+        progressState.rpg.solvedPuzzleIds.includes('puzzle-laberinto-rgb-1976');
+      const matchingSpec = LABYRINTH_RGB_PILLARS.find(
+        (p) => Math.abs(p.x - (prop.x + prop.w / 2)) < 24 && Math.abs(p.y - (prop.y + prop.h / 2)) < 24
+      );
+      const isLit =
+        rgbSolved ||
+        (matchingSpec ? activeRgbPillars.includes(matchingSpec.stepOrder) : false);
+      const cx = prop.x + prop.w / 2;
+      const cy = prop.y + prop.h / 2;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(prop.x - 4, prop.y + prop.h - 4, prop.w + 8, 8);
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(prop.x - 2, prop.y - 2, prop.w + 4, prop.h + 4);
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(prop.x, prop.y, prop.w, prop.h);
+      ctx.strokeStyle = isLit ? '#ffffff' : prop.accentHex;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(prop.x, prop.y, prop.w, prop.h);
+
+      ctx.fillStyle = isLit ? prop.accentHex : '#0f172a';
+      ctx.fillRect(prop.x + 7, prop.y + 7, prop.w - 14, prop.h - 14);
+      if (isLit) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(cx - 3, cy - 3, 6, 6);
+      }
+    } else if (prop.kind === 'breakout-cabinet-1976') {
+      const brkDone =
+        allUnlocked || Boolean(progressState.games['breakout']?.memoryUnlocked);
+      const cx = prop.x + prop.w / 2;
+      const cy = prop.y + prop.h;
+      ctx.fillStyle = '#17122b';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - 4, 48, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = brkDone ? '#39ff14' : '#f97316';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Gabinete upright Atari Breakout (1976) con bisel blanco/madera y 4 franjas CRT
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(cx - 24, cy - 68, 48, 66);
+      ctx.fillStyle = '#d97706';
+      ctx.fillRect(cx - 22, cy - 66, 44, 62);
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(cx - 18, cy - 52, 36, 46);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(cx - 18, cy - 64, 36, 9);
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '700 6px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('BREAKOUT', cx, cy - 57);
+
+      const bands = ['#ef4444', '#f97316', '#22c55e', '#facc15'];
+      bands.forEach((bHex, idx) => {
+        ctx.fillStyle = bHex;
+        ctx.fillRect(cx - 14, cy - 46 + idx * 4, 28, 3);
+      });
+      const bx = Math.round(Math.sin(elapsed * 4.2) * 9);
+      ctx.fillStyle = '#22d3ee';
+      ctx.fillRect(cx - 6 + Math.round(bx * 0.5), cy - 22, 12, 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx + bx - 1, cy - 28, 3, 3);
+    } else if (prop.kind === 'vector-projector') {
+      const vecSolved =
+        allUnlocked ||
+        progressState.rpg.solvedPuzzleIds.includes('puzzle-museo-vector-79');
+      const cx = prop.x + prop.w / 2;
+      const cy = prop.y + prop.h / 2;
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(prop.x - 2, prop.y - 2, prop.w + 4, prop.h + 4);
+      ctx.fillStyle = '#1e1b4b';
+      ctx.fillRect(prop.x, prop.y, prop.w, prop.h);
+      ctx.strokeStyle = vecSolved ? '#39ff14' : '#a78bfa';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(prop.x, prop.y, prop.w, prop.h);
+
+      // Pantalla vectorial XY
+      ctx.strokeStyle = vecSolved ? '#22d3ee' : '#a78bfa';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const rot = reducedMotion ? 0.4 : elapsed * (vecSolved ? 1.8 : 0.6);
+      for (let k = 0; k < 4; k++) {
+        const a = rot + (k * Math.PI) / 2;
+        const px = cx + Math.cos(a) * 14;
+        const py = cy + Math.sin(a) * 11;
+        if (k === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+
+      if (prop.label) {
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '700 8px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(prop.label, cx, prop.y - 6);
+      }
+    } else if (prop.kind === 'museum-pedestal') {
+      const exhibit = MUSEUM_1970S_EXHIBITS.find((e) => e.id === prop.exhibitId);
+      const isPlayable = exhibit?.mode === 'playable';
+      const gameId = exhibit?.linkedGameId;
+      const isEncryptedBreakout =
+        gameId === 'breakout' &&
+        !allUnlocked &&
+        !progressState.games['breakout']?.memoryUnlocked &&
+        !progressState.rpg.discoveredSecretIds.includes('secret-sala-breakout-1976');
+      const isRestored =
+        allUnlocked ||
+        (gameId
+          ? Boolean(progressState.games[gameId]?.memoryUnlocked)
+          : progressState.rpg.inspectedExhibitIds.includes(prop.exhibitId || ''));
+
+      const cx = prop.x + prop.w / 2;
+      const cy = prop.y + prop.h / 2;
+
+      // Sombra y zócalo de museo
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.fillRect(prop.x - 4, prop.y + prop.h - 2, prop.w + 8, 8);
+      ctx.fillStyle = '#070b14';
+      ctx.fillRect(prop.x - 2, prop.y - 2, prop.w + 4, prop.h + 4);
+      ctx.fillStyle = isEncryptedBreakout ? '#1e1b2e' : '#1e293b';
+      ctx.fillRect(prop.x, prop.y, prop.w, prop.h);
+      ctx.strokeStyle = isEncryptedBreakout
+        ? '#64748b'
+        : isRestored
+        ? prop.accentHex
+        : 'rgba(148, 163, 184, 0.55)';
+      ctx.lineWidth = isPlayable ? 2.5 : 1.5;
+      ctx.strokeRect(prop.x, prop.y, prop.w, prop.h);
+
+      // Vitrina / Holograma específico de cada hito de los años 70
+      ctx.fillStyle = '#050a14';
+      ctx.fillRect(prop.x + 8, prop.y + 6, prop.w - 16, 24);
+      if (isEncryptedBreakout) {
+        ctx.fillStyle = '#f97316';
+        ctx.font = '700 10px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('? 1976', cx, prop.y + 22);
+      } else if (prop.exhibitId === 'exhibit-pong-1972') {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(cx - 14, prop.y + 12, 2, 10);
+        ctx.fillRect(cx + 12, prop.y + 12, 2, 10);
+        ctx.fillStyle = '#00f3ff';
+        ctx.fillRect(cx - 2, prop.y + 16, 4, 4);
+      } else if (prop.exhibitId === 'exhibit-breakout-1976') {
+        const cols = ['#ef4444', '#f97316', '#22c55e', '#facc15'];
+        cols.forEach((cHex, i) => {
+          ctx.fillStyle = cHex;
+          ctx.fillRect(cx - 16, prop.y + 9 + i * 3, 32, 2);
+        });
+        ctx.fillStyle = '#22d3ee';
+        ctx.fillRect(cx - 6, prop.y + 25, 12, 2);
+      } else if (prop.exhibitId === 'exhibit-space-invaders-1978') {
+        ctx.fillStyle = '#39ff14';
+        ctx.fillRect(cx - 7, prop.y + 12, 14, 6);
+        ctx.fillRect(cx - 9, prop.y + 18, 3, 3);
+        ctx.fillRect(cx + 6, prop.y + 18, 3, 3);
+      } else if (
+        prop.exhibitId === 'exhibit-lunar-lander-1979' ||
+        prop.exhibitId === 'exhibit-asteroids-1979'
+      ) {
+        ctx.strokeStyle = prop.accentHex;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(cx, prop.y + 10);
+        ctx.lineTo(cx + 9, prop.y + 25);
+        ctx.lineTo(cx, prop.y + 21);
+        ctx.lineTo(cx - 9, prop.y + 25);
+        ctx.closePath();
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = prop.accentHex;
+        ctx.fillRect(cx - 10, prop.y + 13, 20, 10);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(cx - 3, prop.y + 16, 6, 4);
+      }
+
+      // Indicador frontal: JUGABLE vs EXHIBICIÓN
+      ctx.fillStyle = isPlayable ? prop.accentHex : '#94a3b8';
+      ctx.fillRect(prop.x + 10, prop.y + prop.h - 9, prop.w - 20, 4);
+
+      if (prop.label) {
+        ctx.fillStyle = isRestored ? '#ffffff' : '#cbd5e1';
+        ctx.font = '700 7px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(prop.label, cx, prop.y - 6);
+      }
     }
     ctx.restore();
   }
@@ -529,6 +765,14 @@ export function renderSubAreaFrame(params: SubAreaRenderParams): void {
     );
   }
 
+  // Criaturas guardianas dentro de sub-áreas (ej. Sincro-76 en el Laberinto de Señales)
+  for (const creature of GUARDIAN_CREATURES) {
+    if (creature.areaId !== area.id) continue;
+    const calmed =
+      allUnlocked || progressState.rpg.calmedCreatureIds.includes(creature.id);
+    drawGuardianCreatureSprite(ctx, creature, calmed, elapsed, reducedMotion);
+  }
+
   // Jugador Pixel con sprite en 4 direcciones
   drawPixelAvatar4Dir(
     ctx,
@@ -548,6 +792,31 @@ export function renderSubAreaFrame(params: SubAreaRenderParams): void {
       interactAnim: player.interactAnim,
     }
   );
+
+  // Halos HD-2D RGB sutiles en interiores luminosos y Museo Viviente
+  if (!area.isDarkCave) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const prop of area.decorProps) {
+      if (
+        prop.kind === 'museum-pedestal' ||
+        prop.kind === 'breakout-cabinet-1976' ||
+        prop.kind === 'vector-projector' ||
+        prop.kind === 'time-machine-core'
+      ) {
+        const lx = prop.x + prop.w / 2;
+        const ly = prop.y + prop.h / 2;
+        const g = ctx.createRadialGradient(lx, ly, 4, lx, ly, 68);
+        g.addColorStop(0, 'rgba(34, 211, 238, 0.11)');
+        g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(lx, ly, 68, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
 
   // Penumbra de caverna subterránea perforada dinámicamente por la Lámpara de Fósforo
   if (area.isDarkCave) {

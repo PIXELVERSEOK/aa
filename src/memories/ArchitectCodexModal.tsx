@@ -10,15 +10,16 @@
 import React, { useState } from 'react';
 import { BookOpen, Compass, Diamond, Sparkles, X } from 'lucide-react';
 import { retroAudio } from '../audio/retroAudio';
-import { getHistoricalMemory } from './historicalCatalog';
+import { getHistoricalMemory, MUSEUM_1970S_EXHIBITS } from './historicalCatalog';
 import {
+  BREAKOUT_UNLOCK_SCORE,
   PixelAbilityId,
   PixelverseProgressState,
   SPACE_INVADERS_UNLOCK_SCORE,
 } from './progressionState';
 import { ISLAND_ECHOES, ISLAND_ZONES, IslandZoneId } from '../island/island70sData';
 
-type CodexTab = 'memories' | 'echoes' | 'atlas';
+type CodexTab = 'memories' | 'museum' | 'echoes' | 'atlas';
 
 const TRAIL_ECHO_ENTRIES = [
   {
@@ -82,17 +83,17 @@ const ABILITY_CATALOG: {
     id: 'phosphor-lantern',
     name: 'Lámpara de Fósforo Ámbar',
     keyHint: 'Tecla L / Inventario [I]',
-    scopeNote: 'Grutas oscuras y cavernas subterráneas',
+    scopeNote: 'Grutas oscuras, centinelas y cavernas subterráneas',
     description:
-      'Proyecta un halo cálido alrededor de Pixel que disipa la penumbra densa y permite abrir cofres ocultos en la oscuridad.',
+      'Proyecta un halo cálido alrededor de Pixel que disipa la penumbra densa, armoniza centinelas de fase y permite abrir cofres ocultos.',
   },
   {
     id: 'secret-scanner',
     name: 'Escáner de Secretos TTL',
     keyHint: 'Tecla R / Inventario [I]',
-    scopeNote: 'Detección de paredes falsas, cofres y pasadizos',
+    scopeNote: 'Detección de paredes falsas, cofres y frecuencias',
     description:
-      'Emite una onda armónica de radar sobre el terreno revelando grietas ocultas en muros y reliquias cercanas.',
+      'Emite una onda armónica de radar sobre el terreno revelando grietas ocultas en muros, reliquias cercanas y resonancias del Laberinto.',
   },
   {
     id: 'circuit-welder',
@@ -130,15 +131,23 @@ export function ArchitectCodexModal({
   const coreGames = [
     {
       id: 'pong',
+      roleLabel: 'Hito Principal · Jugable',
       requirement: 'Alcanzar 1.000 puntos reales en el gabinete del Santuario de Pong (1972)',
     },
     {
+      id: 'breakout',
+      roleLabel: 'Hito Secreto · Jugable',
+      requirement: `Descubrir la Sala Secreta de 1976 bajo el Laberinto de Señales y alcanzar ${BREAKOUT_UNLOCK_SCORE} puntos en Breakout`,
+    },
+    {
       id: 'glitch-trail',
+      roleLabel: 'Hito Principal · Aventura Jugable',
       requirement:
         'Alinear los prismas, reunir los 3 fragmentos del puente y estabilizar los 3 resonadores',
     },
     {
       id: 'space-invaders',
+      roleLabel: 'Hito Principal · Jugable',
       requirement: `Alcanzar al menos ${SPACE_INVADERS_UNLOCK_SCORE} puntos reales en La Fortaleza de las Oleadas`,
     },
   ];
@@ -157,6 +166,7 @@ export function ArchitectCodexModal({
   const discoveredEchoes = progressState.island70s.discoveredEchoIds;
   const visitedZones = progressState.island70s.visitedZones;
   const unlockedAbilities = progressState.island70s.abilitiesUnlocked;
+  const inspectedExhibits = progressState.rpg.inspectedExhibitIds;
 
   return (
     <div
@@ -194,26 +204,29 @@ export function ArchitectCodexModal({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pb-4 border-b border-white/10 font-mono-tabular">
           <div>
             <span className="block text-[10px] tracking-widest text-slate-400 uppercase">
-              MEMORIAS 70s
+              HITOS 70s
             </span>
             <span className="text-base font-bold text-amber-300">
               {progressState.restoredCount} / 3
+              {(Boolean(progressState.games['breakout']?.memoryUnlocked) || allUnlocked) &&
+                ' + 1976'}
             </span>
           </div>
           <div>
             <span className="block text-[10px] tracking-widest text-slate-400 uppercase">
-              DIAMANTES CIAN
+              MUSEO VIVIENTE
             </span>
             <span className="text-base font-bold text-[#00f3ff]">
-              {progressState.island70s.collectedDiamondIds.length} / 9
+              {allUnlocked ? MUSEUM_1970S_EXHIBITS.length : inspectedExhibits.length} /{' '}
+              {MUSEUM_1970S_EXHIBITS.length}
             </span>
           </div>
           <div>
             <span className="block text-[10px] tracking-widest text-slate-400 uppercase">
-              SOMBRAS DEL PASADO
+              CASOS DEDUCIDOS
             </span>
             <span className="text-base font-bold text-emerald-300">
-              {discoveredEchoes.length} / {allEchoes.length}
+              {allUnlocked ? 3 : progressState.rpg.solvedCaseIds.length} / 3
             </span>
           </div>
           <div>
@@ -229,7 +242,8 @@ export function ArchitectCodexModal({
         {/* Navegación por pestañas */}
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 pb-3">
           {[
-            { id: 'memories' as const, label: 'Hitos Históricos' },
+            { id: 'memories' as const, label: 'Hitos Jugables' },
+            { id: 'museum' as const, label: 'Museo Viviente (1971–1979)' },
             { id: 'echoes' as const, label: 'Sombras del Pasado' },
             { id: 'atlas' as const, label: 'Habilidades y Regiones' },
           ].map((item) => {
@@ -242,7 +256,7 @@ export function ArchitectCodexModal({
                   retroAudio.uiClick();
                   setTab(item.id);
                 }}
-                className={`px-4 py-2 rounded text-xs font-mono-tabular font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                className={`px-3.5 py-2 rounded text-xs font-mono-tabular font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   active
                     ? 'bg-cyan-950/75 border border-[#00f3ff] text-white'
                     : 'bg-black/40 border border-white/12 text-slate-300 hover:text-white'
@@ -278,9 +292,10 @@ export function ArchitectCodexModal({
                       </h3>
                     </div>
                     <span className="font-mono-tabular text-[11px] text-slate-300">
+                      {item.roleLabel} ·{' '}
                       {unlocked
-                        ? `RESTAURADO · RÉCORD ${rec?.bestScore ?? 0} PTS`
-                        : 'PENDIENTE DE RESTAURACIÓN'}
+                        ? `Restaurado (${rec?.bestScore ?? 0} PTS)`
+                        : 'Pendiente'}
                     </span>
                   </div>
 
@@ -299,6 +314,68 @@ export function ArchitectCodexModal({
                   ) : (
                     <p className="text-xs text-slate-400 font-ui">
                       Condición de desbloqueo: {item.requirement}.
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+
+          {tab === 'museum' &&
+            MUSEUM_1970S_EXHIBITS.map((exhibit) => {
+              const isPlayable = exhibit.mode === 'playable';
+              const gameRec = exhibit.linkedGameId
+                ? progressState.games[exhibit.linkedGameId]
+                : undefined;
+              const isUnlockedOrInspected =
+                allUnlocked ||
+                inspectedExhibits.includes(exhibit.id) ||
+                Boolean(gameRec?.memoryUnlocked);
+              const isEncryptedBreakout =
+                exhibit.id === 'exhibit-breakout-1976' &&
+                !allUnlocked &&
+                !progressState.games['breakout']?.memoryUnlocked &&
+                !progressState.rpg.discoveredSecretIds.includes('secret-sala-breakout-1976');
+
+              return (
+                <article
+                  key={exhibit.id}
+                  className="border-b border-white/10 pb-4 last:border-b-0 space-y-1.5"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="font-display text-base font-bold text-white">
+                      {isEncryptedBreakout
+                        ? '1976 · Vitrina Cifrada del Muro Cromático'
+                        : `${exhibit.year} · ${exhibit.title}`}
+                    </h3>
+                    <span
+                      className="font-mono-tabular text-[11px]"
+                      style={{ color: isPlayable ? '#fde047' : '#7dd3fc' }}
+                    >
+                      {isPlayable
+                        ? 'Videojuego Jugable en PIXELVERSE'
+                        : 'Exhibición Histórica Documentada'}
+                    </span>
+                  </div>
+
+                  {isUnlockedOrInspected && !isEncryptedBreakout ? (
+                    <>
+                      <p className="text-xs font-mono-tabular text-cyan-200/90">
+                        {exhibit.creator} · {exhibit.company} · {exhibit.hardwareType}
+                      </p>
+                      <p className="text-sm text-slate-200 font-ui leading-relaxed">
+                        {exhibit.historicalSummary}
+                      </p>
+                      <p className="text-xs text-slate-400 font-ui">
+                        Nota curatorial: {exhibit.curatorialNote}
+                      </p>
+                    </>
+                  ) : isEncryptedBreakout ? (
+                    <p className="text-xs text-amber-200/90 font-ui">
+                      Señal cifrada en el Museo Viviente. Busca la escotilla subterránea al norte de Las Praderas de Pong para hallar el gabinete original de 1976.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400 font-ui">
+                      Visita el Museo Viviente de los 70 en Las Ruinas del Primer Pulso para inspeccionar esta vitrina histórica.
                     </p>
                   )}
                 </article>

@@ -682,3 +682,61 @@ button:focus-visible {
   }
 }
 
+/* =========================================
+   ANIMACIONES DE CÓDIGO SECRETO Y CEREMONIA PIXEL
+   ========================================= */
+@keyframes btnGlitchReveal {
+  0% {
+    transform: scale(0.8) translateY(12px);
+    opacity: 0;
+    filter: hue-rotate(90deg) drop-shadow(0 0 20px #00f3ff);
+  }
+  25% {
+    transform: scale(1.1) translateY(-4px) skewX(8deg);
+    opacity: 0.85;
+    filter: hue-rotate(180deg) drop-shadow(0 0 30px #ff00ff);
+  }
+  50% {
+    transform: scale(0.95) translateY(2px) skewX(-6deg);
+    opacity: 1;
+    filter: hue-rotate(270deg) drop-shadow(0 0 35px #39ff14);
+  }
+  75% {
+    transform: scale(1.04) translateY(-1px);
+    filter: hue-rotate(360deg) drop-shadow(0 0 25px #10b981);
+  }
+  100% {
+    transform: scale(1) translateY(0) skewX(0);
+    opacity: 1;
+    filter: none;
+  }
+}
+
+.btn-code-reveal-anim {
+  animation: btnGlitchReveal 0.85s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes rgbCeremonyGlow {
+  0% {
+    border-color: #00f3ff;
+    box-shadow: 0 0 30px rgba(0, 243, 255, 0.7), inset 0 0 20px rgba(0, 243, 255, 0.3);
+  }
+  33% {
+    border-color: #ff00ff;
+    box-shadow: 0 0 40px rgba(255, 0, 255, 0.8), inset 0 0 25px rgba(255, 0, 255, 0.4);
+  }
+  66% {
+    border-color: #fde047;
+    box-shadow: 0 0 40px rgba(253, 224, 71, 0.8), inset 0 0 25px rgba(253, 224, 71, 0.4);
+  }
+  100% {
+    border-color: #00f3ff;
+    box-shadow: 0 0 30px rgba(0, 243, 255, 0.7), inset 0 0 20px rgba(0, 243, 255, 0.3);
+  }
+}
+
+.pixel-ceremony-box {
+  animation: rgbCeremonyGlow 3s infinite alternate ease-in-out;
+}
+
+

@@ -814,6 +814,98 @@ class RetroAudioEngine {
       osc.stop(t + 0.55);
     });
   }
+
+  public breakoutPaddle(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(440, now);
+    gain.gain.setValueAtTime(0.068, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.06);
+  }
+
+  public breakoutBrick(tier: 0 | 1 | 2 | 3): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    // Tonos ascendentes fieles a las 4 franjas cromáticas de Breakout (1976): amarillo -> verde -> naranja -> rojo
+    const freqs = [329.63, 440.0, 587.33, 783.99];
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freqs[tier] || 440, now);
+    gain.gain.setValueAtTime(0.072, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.08);
+  }
+
+  public puzzleNodeTone(index: number): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const scale = [392.0, 493.88, 587.33, 783.99, 987.77];
+    const freq = scale[Math.max(0, Math.min(scale.length - 1, index))];
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, now);
+    gain.gain.setValueAtTime(0.075, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.26);
+  }
+
+  public creatureChime(calmed: boolean): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const notes = calmed ? [523.25, 659.25, 783.99, 1046.5] : [311.13, 277.18, 233.08];
+    notes.forEach((f, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = calmed ? 'sine' : 'triangle';
+      const t = now + idx * 0.08;
+      osc.frequency.setValueAtTime(f, t);
+      gain.gain.setValueAtTime(0.06, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.35);
+    });
+  }
+
+  public caseDeductionSolved(): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const notes = [349.23, 440.0, 523.25, 698.46, 880.0];
+    notes.forEach((f, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = idx < 3 ? 'triangle' : 'sine';
+      const t = now + idx * 0.085;
+      osc.frequency.setValueAtTime(f, t);
+      gain.gain.setValueAtTime(0.075, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.48);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.5);
+    });
+  }
 }
 
 export const retroAudio = new RetroAudioEngine();

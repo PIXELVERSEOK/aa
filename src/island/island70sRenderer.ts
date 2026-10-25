@@ -19,10 +19,13 @@ import {
   evaluateTimeMachineStatus,
   ExteriorBuildingSpec,
   FacingDirection,
+  GUARDIAN_CREATURES,
+  GuardianCreatureSpec,
   HARBOR_80S_FERRY,
   ISLAND_70S_BUILDINGS,
   ISLAND_ANOMALY_PORTALS,
   ISLAND_WOODEN_SIGNS,
+  LABYRINTH_1976_ENTRANCE,
   RPG_CHESTS,
   RPG_EXAMINABLES,
   VILLAGE_SAVE_TERMINAL,
@@ -464,6 +467,121 @@ function drawGbcRockTunnelEntrance(ctx: CanvasRenderingContext2D, tx: number, ty
   ctx.fillStyle = '#383028';
   ctx.fillRect(-8, -6, 16, 3);
   ctx.fillRect(-8, -1, 16, 3);
+
+  ctx.restore();
+}
+
+/** Escotilla subterránea cifrada hacia el Laberinto de Señales de 1976 */
+function drawLabyrinth1976Hatch(
+  ctx: CanvasRenderingContext2D,
+  hx: number,
+  hy: number,
+  unlockedBreakout: boolean,
+  elapsed: number
+): void {
+  const x = Math.round(hx);
+  const y = Math.round(hy);
+  ctx.save();
+  ctx.translate(x, y);
+
+  ctx.fillStyle = 'rgba(5, 8, 18, 0.5)';
+  ctx.fillRect(-26, -12, 52, 32);
+
+  // Zócalo octogonal de bronce y acero TTL
+  ctx.fillStyle = '#070b14';
+  ctx.fillRect(-24, -16, 48, 34);
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(-22, -14, 44, 30);
+  ctx.fillStyle = '#d8be88';
+  ctx.fillRect(-20, -12, 40, 4);
+
+  // Boca de descenso con escalerilla metálica iluminada
+  ctx.fillStyle = '#050811';
+  ctx.fillRect(-14, -6, 28, 18);
+  ctx.fillStyle = '#94a3b8';
+  for (let sy = -4; sy <= 8; sy += 5) {
+    ctx.fillRect(-8, sy, 16, 2);
+  }
+
+  // 4 testigos cromáticos de 1976 (amarillo, verde, naranja, rojo)
+  const leds = ['#facc15', '#22c55e', '#f97316', '#ef4444'];
+  leds.forEach((col, i) => {
+    const active = unlockedBreakout || Math.floor(elapsed * 3 + i) % 4 === 0;
+    ctx.fillStyle = active ? col : '#1e293b';
+    ctx.fillRect(-15 + i * 9, -11, 6, 3);
+  });
+
+  ctx.restore();
+}
+
+/** Criaturas guardianas originales de PIXELVERSE (Lumen-Bit, Sincro-76, Vectra-79) */
+export function drawGuardianCreatureSprite(
+  ctx: CanvasRenderingContext2D,
+  creature: GuardianCreatureSpec,
+  calmed: boolean,
+  elapsed: number,
+  reducedMotion: boolean
+): void {
+  const x = Math.round(creature.x);
+  const y = Math.round(creature.y);
+  const floatY = reducedMotion ? 0 : Math.round(Math.sin(elapsed * 3.4 + x * 0.05) * 4);
+  const wingBeat = reducedMotion ? 0 : Math.sin(elapsed * 9) > 0 ? 3 : -2;
+
+  ctx.save();
+  ctx.translate(x, y + floatY);
+
+  // Sombra de oclusión en el suelo
+  ctx.fillStyle = 'rgba(4, 8, 18, 0.45)';
+  ctx.fillRect(-12, 6 - floatY, 24, 5);
+
+  // Halo cromático HD-2D RGB
+  ctx.globalAlpha = calmed ? 0.3 : 0.2;
+  ctx.fillStyle = calmed ? creature.secondaryHex : creature.accentHex;
+  ctx.beginPath();
+  ctx.arc(0, -12, calmed ? 24 : 18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  if (creature.id === 'creature-sincro-laberinto') {
+    // Sincro-76: Centinela geométrico de anillos TTL
+    if (!calmed) {
+      // Barrera energética activa en el corredor
+      ctx.strokeStyle = 'rgba(249, 115, 22, 0.65)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-22, -38, 44, 48);
+    }
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(-13, -26, 26, 24);
+    ctx.fillStyle = calmed ? '#22d3ee' : '#f97316';
+    ctx.fillRect(-11, -24, 22, 20);
+    ctx.fillStyle = '#090d18';
+    ctx.fillRect(-7, -20, 14, 12);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-3, -16, 6, 4);
+  } else if (creature.id === 'creature-vectra-caverna') {
+    // Vectra-79: Prisma vectorial XY flotante
+    ctx.strokeStyle = calmed ? '#22d3ee' : '#a78bfa';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -28);
+    ctx.lineTo(15 + wingBeat, -13);
+    ctx.lineTo(0, 2);
+    ctx.lineTo(-15 - wingBeat, -13);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-3, -16, 6, 6);
+  } else {
+    // Lumen-Bit: Polilla luminiscente de fósforo esmeralda/ámbar
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(-16, -22 + wingBeat, 12, 12);
+    ctx.fillRect(4, -22 + wingBeat, 12, 12);
+    ctx.fillStyle = calmed ? '#facc15' : '#34d399';
+    ctx.fillRect(-14, -20 + wingBeat, 9, 8);
+    ctx.fillRect(5, -20 + wingBeat, 9, 8);
+    ctx.fillStyle = '#ecfdf5';
+    ctx.fillRect(-4, -20, 8, 12);
+  }
 
   ctx.restore();
 }
@@ -1162,6 +1280,25 @@ function drawHandcraftedPathsAndStairs(
     '#b8c2cc',
     '#526071'
   );
+  // Ramal noroeste hacia el Museo Viviente de los 70 y sendero norte a la Escotilla 1976
+  drawSteppingPath(
+    [
+      [1640, 1296],
+      [1640, 1052],
+    ],
+    26,
+    '#cbd5e1',
+    '#475569'
+  );
+  drawSteppingPath(
+    [
+      [2680, 1560],
+      [2704, 1364],
+    ],
+    22,
+    '#b8ab7a',
+    '#665938'
+  );
 
   // Escalinatas talladas en piedra para salvar desniveles entre terrazas
   const stairConnectors = [
@@ -1471,6 +1608,37 @@ function drawPixelverseBuilding(
     ctx.fillRect(bx + 20, by - 4, bldg.w - 40, 10);
     ctx.fillStyle = '#d8be88';
     ctx.fillRect(bx + 4, by + 16, bldg.w - 8, 3);
+  } else if (style === 'museum-hall') {
+    // MUSEO VIVIENTE DE LOS 70: Galería neoclásica retrofuturista con tragaluz de cristal y friso cromático RGB
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx - 4, by + 18, bldg.w + 8, bldg.h - 16);
+    ctx.fillStyle = bldg.wallHex;
+    ctx.fillRect(bx - 2, by + 20, bldg.w + 4, bldg.h - 20);
+
+    // Columnata de mármol azulado
+    ctx.fillStyle = '#94a3b8';
+    for (const cxOff of [10, 44, bldg.w - 56, bldg.w - 22]) {
+      ctx.fillRect(bx + cxOff, by + 28, 10, bldg.h - 32);
+    }
+
+    // Cubierta escalonada de pizarra con claraboya luminosa cian-ámbar
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(bx - 8, by + 2, bldg.w + 16, 18);
+    ctx.fillRect(bx + 24, by - 10, bldg.w - 48, 14);
+    ctx.fillStyle = bldg.roofHex;
+    ctx.fillRect(bx - 6, by + 4, bldg.w + 12, 14);
+    ctx.fillStyle = '#0ea5e9';
+    ctx.fillRect(bx + 32, by - 8, bldg.w - 64, 10);
+    ctx.fillStyle = '#bae6fd';
+    ctx.fillRect(bx + 40, by - 6, bldg.w - 80, 4);
+
+    // Friso histórico de 4 bandas (1971–1979)
+    const frieze = ['#00f3ff', '#facc15', '#f97316', '#39ff14'];
+    const segW = Math.floor((bldg.w - 16) / 4);
+    frieze.forEach((hex, idx) => {
+      ctx.fillStyle = hex;
+      ctx.fillRect(bx + 8 + idx * segW, by + 21, segW - 2, 3);
+    });
   } else {
     // CENTRO DE HISTORIA EN LA ALDEA: Mampostería cálida, teja artesanal con hastial triangular y antena
     ctx.fillStyle = '#070b14';
@@ -1930,6 +2098,28 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     }
   }
 
+  // Escotilla Cifrada hacia el Laberinto de Señales (1976) al norte de las Praderas de Pong
+  if (
+    isWorldBoxVisible(
+      LABYRINTH_1976_ENTRANCE.x - 32,
+      LABYRINTH_1976_ENTRANCE.y - 28,
+      64,
+      56,
+      camX,
+      camY,
+      vw,
+      vh
+    )
+  ) {
+    drawLabyrinth1976Hatch(
+      ctx,
+      LABYRINTH_1976_ENTRANCE.x,
+      LABYRINTH_1976_ENTRANCE.y,
+      Boolean(progressState.games['breakout']?.memoryUnlocked) || allUnlocked,
+      elapsed
+    );
+  }
+
   for (const sign of ISLAND_WOODEN_SIGNS) {
     if (isWorldBoxVisible(sign.x - 20, sign.y - 30, 40, 40, camX, camY, vw, vh)) {
       drawGbcWoodenSign(ctx, sign.x, sign.y);
@@ -2379,6 +2569,21 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     });
   }
 
+  // Criaturas guardianas originales en el mundo exterior (Lumen-Bit y Vectra-79)
+  for (const creature of GUARDIAN_CREATURES) {
+    if (creature.areaId !== 'exterior-70s') continue;
+    if (!isWorldBoxVisible(creature.x - 32, creature.y - 40, 64, 56, camX, camY, vw, vh)) {
+      continue;
+    }
+    const calmed =
+      allUnlocked || progressState.rpg.calmedCreatureIds.includes(creature.id);
+    ySortedDrawables.push({
+      sortY: creature.y,
+      draw: () =>
+        drawGuardianCreatureSprite(ctx, creature, calmed, elapsed, reducedMotion),
+    });
+  }
+
   // Jugador Pixel integrado en el ordenamiento de profundidad cuando camina en tierra
   const playerFlyingHover =
     flight.type === 'pong-to-garganta' || flight.type === 'garganta-to-pong';
@@ -2448,6 +2653,16 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
         y: WATERFALL_SECRET_ENTRANCE.y,
         tag: '¡GRUTA TRAS CASCADA!',
       },
+      {
+        x: LABYRINTH_1976_ENTRANCE.x,
+        y: LABYRINTH_1976_ENTRANCE.y,
+        tag: 'ESCOTILLA LABERINTO 1976',
+      },
+      ...GUARDIAN_CREATURES.filter((cr) => cr.areaId === 'exterior-70s').map((cr) => ({
+        x: cr.x,
+        y: cr.y,
+        tag: 'GUARDIÁN DE FRECUENCIA',
+      })),
       ...ISLAND_ANOMALY_PORTALS.map((ap) => ({
         x: ap.x,
         y: ap.y,
@@ -2510,10 +2725,79 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     ctx.fillRect(Math.round(pb.x - 2), Math.round(pb.y - 2), 6, 6);
   }
 
+  // 9. ILUMINACIÓN ATMOSFÉRICA HD-2D + RGB PLAYGROUNDS (halos aditivos limpios y semánticos)
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const lightPools: { x: number; y: number; r: number; rgba: string }[] = [
+    ...PHOSPHOR_LAMPS.map((l) => ({
+      x: l.x,
+      y: l.y - 18,
+      r: 72,
+      rgba: l.color === '#00f3ff' ? 'rgba(0, 243, 255, 0.11)' : 'rgba(251, 191, 36, 0.12)',
+    })),
+    {
+      x: ISLAND_KEY_COORDS.pongCabinet.x,
+      y: ISLAND_KEY_COORDS.pongCabinet.y - 24,
+      r: 92,
+      rgba: pongRestored ? 'rgba(0, 243, 255, 0.14)' : 'rgba(250, 204, 21, 0.1)',
+    },
+    {
+      x: ISLAND_KEY_COORDS.invadersCabinet.x,
+      y: ISLAND_KEY_COORDS.invadersCabinet.y - 26,
+      r: 96,
+      rgba: invadersRestored ? 'rgba(57, 255, 20, 0.14)' : 'rgba(249, 115, 22, 0.12)',
+    },
+    {
+      x: ISLAND_KEY_COORDS.glitchTrailPortal.x,
+      y: ISLAND_KEY_COORDS.glitchTrailPortal.y - 28,
+      r: 105,
+      rgba: 'rgba(168, 85, 247, 0.14)',
+    },
+    {
+      x: 1640,
+      y: 990,
+      r: 110,
+      rgba: 'rgba(34, 211, 238, 0.11)',
+    },
+    {
+      x: LABYRINTH_1976_ENTRANCE.x,
+      y: LABYRINTH_1976_ENTRANCE.y,
+      r: 68,
+      rgba: 'rgba(249, 115, 22, 0.13)',
+    },
+  ];
+  for (const lp of lightPools) {
+    if (!isWorldBoxVisible(lp.x - lp.r, lp.y - lp.r, lp.r * 2, lp.r * 2, camX, camY, vw, vh)) {
+      continue;
+    }
+    const g = ctx.createRadialGradient(lp.x, lp.y, 4, lp.x, lp.y, lp.r);
+    g.addColorStop(0, lp.rgba);
+    g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(lp.x, lp.y, lp.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
   ctx.restore();
 
   if (activeZoneId) {
     ctx.fillStyle = ISLAND_ZONES[activeZoneId].ambientTint;
     ctx.fillRect(0, 0, vw, vh);
   }
+
+  // Viñeta cinematográfica sutil estilo Octopath / HD-2D sin oscurecer el centro jugable
+  const vig = ctx.createRadialGradient(
+    vw * 0.5,
+    vh * 0.5,
+    Math.min(vw, vh) * 0.36,
+    vw * 0.5,
+    vh * 0.5,
+    Math.max(vw, vh) * 0.74
+  );
+  vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  vig.addColorStop(1, 'rgba(2, 6, 18, 0.32)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, vw, vh);
 }

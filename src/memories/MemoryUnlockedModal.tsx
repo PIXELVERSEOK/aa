@@ -191,6 +191,25 @@ export function MemoryUnlockedModal({
         const ballOrbitY = cy + Math.sin(elapsed * 2.8) * 18;
         ctx.fillStyle = '#00f3ff';
         ctx.fillRect(Math.round(ballOrbitX - 4), Math.round(ballOrbitY - 4), 8, 8);
+      } else if (motif === 'breakout') {
+        // Muro cromático de 4 bandas (rojo, naranja, verde, amarillo) + paleta cian y esfera
+        const rowColors = ['#ef4444', '#f97316', '#22c55e', '#facc15'];
+        ctx.globalAlpha = Math.min(1, elapsed / 1.1) * 0.92;
+        for (const side of [-112, 76]) {
+          rowColors.forEach((col, rIdx) => {
+            ctx.fillStyle = col;
+            for (let c = 0; c < 3; c++) {
+              ctx.fillRect(cx + side + c * 13, cy - 22 + rIdx * 6, 11, 4);
+            }
+          });
+        }
+        ctx.fillStyle = '#22d3ee';
+        const padX = cx + Math.sin(elapsed * 2.6) * 58;
+        ctx.fillRect(Math.round(padX - 18), cy + 18, 36, 4);
+        ctx.fillStyle = '#ffffff';
+        const bx = cx + Math.cos(elapsed * 3.4) * 74;
+        const by = cy + Math.sin(elapsed * 5.1) * 14;
+        ctx.fillRect(Math.round(bx - 3), Math.round(by - 3), 6, 6);
       } else if (motif === 'space-invaders') {
         // Estrellas e iconos pixelados de invasores y escudos de 1978
         ctx.globalAlpha = 0.88;
@@ -272,9 +291,10 @@ export function MemoryUnlockedModal({
       ctx.stroke();
 
       const milestones = [
-        { yr: '1972', x: W * 0.26, active: entry.year === 1972 },
-        { yr: '1978', x: W * 0.5, active: entry.year === 1978 },
-        { yr: '1981', x: W * 0.74, active: entry.year === 1981 },
+        { yr: '1972', x: W * 0.2, active: entry.year === 1972 },
+        { yr: '1976', x: W * 0.4, active: entry.year === 1976 },
+        { yr: '1978', x: W * 0.6, active: entry.year === 1978 },
+        { yr: '1981', x: W * 0.8, active: entry.year === 1981 },
       ];
       milestones.forEach((m) => {
         ctx.fillStyle = m.active ? '#00f3ff' : '#334155';

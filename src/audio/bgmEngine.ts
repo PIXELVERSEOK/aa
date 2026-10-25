@@ -354,19 +354,26 @@ class RetroArcadeBgmManager {
     this.notify();
   }
 
-  public toggleMute(): boolean {
-    if (!this.initialized) {
+  public setMuted(nextMuted: boolean): boolean {
+    if (!this.initialized && !nextMuted) {
       this.initAndStart();
     }
-    this.muted = !this.muted;
+    this.muted = nextMuted;
     Howler.mute(this.muted);
 
     if (!this.muted) {
       this.ensurePlaying();
     } else {
+      if (this.howl && this.howl.playing()) {
+        this.howl.mute(true);
+      }
       this.notify();
     }
     return this.muted;
+  }
+
+  public toggleMute(): boolean {
+    return this.setMuted(!this.muted);
   }
 
   public isMuted(): boolean {

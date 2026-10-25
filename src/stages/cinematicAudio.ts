@@ -177,6 +177,15 @@ class CinematicScoreDirector {
     const ctx = this.ensureContext();
     if (!ctx) return;
 
+    if (ctx.state !== 'running') {
+      for (const cue of this.cues) {
+        if (elapsedSec - cue.timeSec > 0.8) {
+          this.firedCues.add(cue.id);
+        }
+      }
+      return;
+    }
+
     for (const cue of this.cues) {
       if (elapsedSec >= cue.timeSec && !this.firedCues.has(cue.id)) {
         this.firedCues.add(cue.id);
