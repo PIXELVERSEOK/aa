@@ -74,9 +74,33 @@ const ABILITY_CATALOG: {
     id: 'star-shuttle',
     name: 'Nave Estelar PIXELVERSE (1978)',
     keyHint: 'Secuencia orbital y plataforma norte',
-    scopeNote: 'Retorno orbital exclusivo hacia la Isla de los 70',
+    scopeNote: 'Retorno orbital y ruta marítima a Isla Neón 1980s',
     description:
-      'Tras superar los 1000 puntos reales en Space Invaders, transporta a Pixel de vuelta a la plataforma de aterrizaje de La Fortaleza de las Oleadas.',
+      'Tras superar los 1000 puntos reales en Space Invaders, transporta a Pixel a La Fortaleza y habilita el Navío del Puerto Este.',
+  },
+  {
+    id: 'phosphor-lantern',
+    name: 'Lámpara de Fósforo Ámbar',
+    keyHint: 'Tecla L / Inventario [I]',
+    scopeNote: 'Grutas oscuras y cavernas subterráneas',
+    description:
+      'Proyecta un halo cálido alrededor de Pixel que disipa la penumbra densa y permite abrir cofres ocultos en la oscuridad.',
+  },
+  {
+    id: 'secret-scanner',
+    name: 'Escáner de Secretos TTL',
+    keyHint: 'Tecla R / Inventario [I]',
+    scopeNote: 'Detección de paredes falsas, cofres y pasadizos',
+    description:
+      'Emite una onda armónica de radar sobre el terreno revelando grietas ocultas en muros y reliquias cercanas.',
+  },
+  {
+    id: 'circuit-welder',
+    name: 'Soldador Lógico de Precisión',
+    keyHint: 'Tecla E en relés averiados',
+    scopeNote: 'Reparación de mecanismos antiguos en el mundo',
+    description:
+      'Forjado por el Maestro Kertz en el Taller Analógico para restaurar terminales dañados y puentes auxiliares.',
   },
 ];
 
@@ -106,7 +130,7 @@ export function ArchitectCodexModal({
   const coreGames = [
     {
       id: 'pong',
-      requirement: 'Alcanzar 3 puntos reales frente a la máquina en el Santuario de Pong',
+      requirement: 'Alcanzar 1.000 puntos reales en el gabinete del Santuario de Pong (1972)',
     },
     {
       id: 'glitch-trail',

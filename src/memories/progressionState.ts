@@ -22,7 +22,26 @@ export type PixelAbilityId =
   | 'phase-sprint'
   | 'pong-hoverboard'
   | 'phase-dash'
-  | 'star-shuttle';
+  | 'star-shuttle'
+  | 'phosphor-lantern'
+  | 'secret-scanner'
+  | 'circuit-welder';
+
+export type QuestProgressStatus = 'inactive' | 'active' | 'completed';
+
+export interface RpgExplorationState {
+  inventoryItems: string[];
+  equippedCosmetic: string | null;
+  openedChestIds: string[];
+  discoveredSecretIds: string[];
+  solvedPuzzleIds: string[];
+  repairedMechanismIds: string[];
+  questStates: Record<string, 'active' | 'completed'>;
+  unlockedIslands: string[];
+  lanternActive: boolean;
+  lastSafeArea: 'exterior-70s' | 'island-80s';
+  last80sPos: { x: number; y: number } | null;
+}
 
 export interface GameRestorationRecord {
   id: HistoricalGameId;
@@ -57,11 +76,13 @@ export interface PixelverseProgressState {
   diamondsSaved: number;
   restoredCount: number;
   island70s: Island70sExplorationState;
+  rpg: RpgExplorationState;
 }
 
 const STORAGE_KEY_V2 = 'pixelverse_adventure_progress_v2';
 const LEGACY_STORAGE_KEY_V1 = 'pixelverse_historical_progress_v1';
 
+export const PONG_UNLOCK_SCORE = 1000;
 export const SPACE_INVADERS_UNLOCK_SCORE = 1000;
 
 function createDefaultRecord(id: HistoricalGameId): GameRestorationRecord {
@@ -75,6 +96,24 @@ function createDefaultRecord(id: HistoricalGameId): GameRestorationRecord {
     returnedToIsland: false,
     bestScore: 0,
     completionsCount: 0,
+  };
+}
+
+export function createDefaultRpgState(): RpgExplorationState {
+  return {
+    inventoryItems: ['item-bitacora-cero'],
+    equippedCosmetic: null,
+    openedChestIds: [],
+    discoveredSecretIds: [],
+    solvedPuzzleIds: [],
+    repairedMechanismIds: [],
+    questStates: {
+      'quest-pulso-1972': 'active',
+    },
+    unlockedIslands: ['island-70s'],
+    lanternActive: false,
+    lastSafeArea: 'exterior-70s',
+    last80sPos: null,
   };
 }
 
@@ -97,7 +136,7 @@ export function createDefaultIsland70sState(): Island70sExplorationState {
 
 export function createInitialProgressState(): PixelverseProgressState {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     games: {
       pong: createDefaultRecord('pong'),
       'donkey-kong': createDefaultRecord('donkey-kong'),
@@ -107,6 +146,7 @@ export function createInitialProgressState(): PixelverseProgressState {
     diamondsSaved: 0,
     restoredCount: 0,
     island70s: createDefaultIsland70sState(),
+    rpg: createDefaultRpgState(),
   };
 }
 
@@ -135,9 +175,77 @@ function sanitizeCheckpoints(raw: unknown): Record<string, string> {
   return out;
 }
 
+function sanitizeQuestStates(raw: unknown): Record<string, 'active' | 'completed'> {
+  const out: Record<string, 'active' | 'completed'> = {
+    'quest-pulso-1972': 'active',
+  };
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (v === 'active' || v === 'completed') {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function deriveCoherentRpgState(
+  rpg: RpgExplorationState,
+  games: Record<string, GameRestorationRecord>
+): RpgExplorationState {
+  const pongDone = Boolean(games['pong']?.memoryUnlocked);
+  const invadersDone = Boolean(games['space-invaders']?.memoryUnlocked);
+  const dkDone = Boolean(games['donkey-kong']?.memoryUnlocked);
+
+  const items = new Set<string>(rpg.inventoryItems);
+  items.add('item-bitacora-cero');
+  if (pongDone) {
+    items.add('item-lampara-fosforo');
+  }
+  if (invadersDone) {
+    items.add('item-pase-astral-80s');
+  }
+  if (dkDone) {
+    items.add('item-insignia-vigas-1981');
+  }
+
+  const unlockedIslands = new Set<string>(rpg.unlockedIslands);
+  unlockedIslands.add('island-70s');
+  if (invadersDone) {
+    unlockedIslands.add('island-80s');
+  }
+
+  const quests: Record<string, 'active' | 'completed'> = { ...rpg.questStates };
+  if (pongDone) {
+    quests['quest-pulso-1972'] = 'completed';
+    if (!quests['quest-defensa-1978']) {
+      quests['quest-defensa-1978'] = 'active';
+    }
+  } else if (!quests['quest-pulso-1972']) {
+    quests['quest-pulso-1972'] = 'active';
+  }
+
+  if (invadersDone) {
+    quests['quest-defensa-1978'] = 'completed';
+    if (!quests['quest-despertar-1981']) {
+      quests['quest-despertar-1981'] = 'active';
+    }
+  }
+  if (dkDone) {
+    quests['quest-despertar-1981'] = 'completed';
+  }
+
+  return {
+    ...rpg,
+    inventoryItems: Array.from(items),
+    unlockedIslands: Array.from(unlockedIslands),
+    questStates: quests,
+  };
+}
+
 function deriveCoherentIslandState(
   island: Island70sExplorationState,
-  games: Record<string, GameRestorationRecord>
+  games: Record<string, GameRestorationRecord>,
+  rpg?: RpgExplorationState
 ): Island70sExplorationState {
   const pongDone = Boolean(games['pong']?.memoryUnlocked);
   const trailDone =
@@ -155,9 +263,19 @@ function deriveCoherentIslandState(
   if (pongDone) {
     abilities.add('pong-hoverboard');
     abilities.add('phase-dash');
+    abilities.add('phosphor-lantern');
   }
   if (invadersDone) {
     abilities.add('star-shuttle');
+  }
+  if (rpg?.inventoryItems.includes('item-escaner-frecuencias')) {
+    abilities.add('secret-scanner');
+  }
+  if (rpg?.inventoryItems.includes('item-soldador-logico')) {
+    abilities.add('circuit-welder');
+  }
+  if (rpg?.inventoryItems.includes('item-lampara-fosforo')) {
+    abilities.add('phosphor-lantern');
   }
 
   const objectives = new Set<string>(island.completedObjectives);
@@ -235,6 +353,40 @@ export function loadProgressState(): PixelverseProgressState {
       }
     }
 
+    const rawRpg = parsed.rpg;
+    const baseRpg: RpgExplorationState =
+      rawRpg && typeof rawRpg === 'object'
+        ? {
+            inventoryItems: sanitizeStringArray(rawRpg.inventoryItems, [
+              'item-bitacora-cero',
+            ]),
+            equippedCosmetic:
+              typeof rawRpg.equippedCosmetic === 'string' &&
+              rawRpg.equippedCosmetic.length > 0
+                ? rawRpg.equippedCosmetic
+                : null,
+            openedChestIds: sanitizeStringArray(rawRpg.openedChestIds),
+            discoveredSecretIds: sanitizeStringArray(rawRpg.discoveredSecretIds),
+            solvedPuzzleIds: sanitizeStringArray(rawRpg.solvedPuzzleIds),
+            repairedMechanismIds: sanitizeStringArray(rawRpg.repairedMechanismIds),
+            questStates: sanitizeQuestStates(rawRpg.questStates),
+            unlockedIslands: sanitizeStringArray(rawRpg.unlockedIslands, ['island-70s']),
+            lanternActive: Boolean(rawRpg.lanternActive),
+            lastSafeArea:
+              rawRpg.lastSafeArea === 'island-80s' ? 'island-80s' : 'exterior-70s',
+            last80sPos:
+              rawRpg.last80sPos &&
+              typeof rawRpg.last80sPos.x === 'number' &&
+              typeof rawRpg.last80sPos.y === 'number' &&
+              Number.isFinite(rawRpg.last80sPos.x) &&
+              Number.isFinite(rawRpg.last80sPos.y)
+                ? { x: rawRpg.last80sPos.x, y: rawRpg.last80sPos.y }
+                : null,
+          }
+        : createDefaultRpgState();
+
+    const coherentRpg = deriveCoherentRpgState(baseRpg, mergedGames);
+
     const rawIsland = parsed.island70s;
     const baseIsland: Island70sExplorationState =
       rawIsland && typeof rawIsland === 'object'
@@ -268,7 +420,7 @@ export function loadProgressState(): PixelverseProgressState {
           }
         : createDefaultIsland70sState();
 
-    const coherentIsland = deriveCoherentIslandState(baseIsland, mergedGames);
+    const coherentIsland = deriveCoherentIslandState(baseIsland, mergedGames, coherentRpg);
     const uniqueDiamondCount = coherentIsland.collectedDiamondIds.length;
     const savedDiamonds = Math.max(
       uniqueDiamondCount,
@@ -276,11 +428,12 @@ export function loadProgressState(): PixelverseProgressState {
     );
 
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       games: mergedGames,
       diamondsSaved: savedDiamonds,
       restoredCount: countRestored(mergedGames),
       island70s: coherentIsland,
+      rpg: coherentRpg,
     };
   } catch {
     return fallback;
@@ -336,9 +489,12 @@ export function recordGameVictory(
   diamondsEarned = 0
 ): PixelverseProgressState {
   const existing = prev.games[gameId] || createDefaultRecord(gameId);
-  // Space Invaders exige >= 1000 puntos reales para desbloquear su recuerdo histórico
   const qualifiesForMemory =
-    gameId === 'space-invaders' ? score >= SPACE_INVADERS_UNLOCK_SCORE : true;
+    gameId === 'space-invaders'
+      ? score >= SPACE_INVADERS_UNLOCK_SCORE
+      : gameId === 'pong'
+      ? score >= PONG_UNLOCK_SCORE || score === 3
+      : true;
 
   const updated: GameRestorationRecord = {
     ...existing,
@@ -368,10 +524,11 @@ export function recordGameVictory(
         }
       : prev.island70s;
 
-  const coherentIsland = deriveCoherentIslandState(nextIslandRaw, nextGames);
+  const coherentRpg = deriveCoherentRpgState(prev.rpg, nextGames);
+  const coherentIsland = deriveCoherentIslandState(nextIslandRaw, nextGames, coherentRpg);
 
   const next: PixelverseProgressState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     games: nextGames,
     diamondsSaved: Math.max(
       prev.diamondsSaved,
@@ -380,6 +537,7 @@ export function recordGameVictory(
     ),
     restoredCount: countRestored(nextGames),
     island70s: coherentIsland,
+    rpg: coherentRpg,
   };
   saveProgressState(next);
   return next;
@@ -444,7 +602,8 @@ export function collectUniqueMemoryDiamond(
         ...prev.island70s,
         collectedDiamondIds,
       },
-      prev.games
+      prev.games,
+      prev.rpg
     ),
   };
   saveProgressState(next);
@@ -496,7 +655,8 @@ export function recordIslandSwitchActivated(
         ...prev.island70s,
         activatedIslandSwitches,
       },
-      prev.games
+      prev.games,
+      prev.rpg
     ),
   };
   saveProgressState(next);
@@ -565,7 +725,8 @@ export function saveLastIslandCoordinates(
   if (
     prev.island70s.lastIslandPos &&
     prev.island70s.lastIslandPos.x === rx &&
-    prev.island70s.lastIslandPos.y === ry
+    prev.island70s.lastIslandPos.y === ry &&
+    prev.rpg.lastSafeArea === 'exterior-70s'
   ) {
     return prev;
   }
@@ -575,7 +736,215 @@ export function saveLastIslandCoordinates(
       ...prev.island70s,
       lastIslandPos: { x: rx, y: ry },
     },
+    rpg: {
+      ...prev.rpg,
+      lastSafeArea: 'exterior-70s',
+    },
   };
   saveProgressState(next);
   return next;
 }
+
+export function saveLast80sCoordinates(
+  prev: PixelverseProgressState,
+  x: number,
+  y: number
+): PixelverseProgressState {
+  const rx = Math.round(x);
+  const ry = Math.round(y);
+  if (
+    prev.rpg.last80sPos &&
+    prev.rpg.last80sPos.x === rx &&
+    prev.rpg.last80sPos.y === ry &&
+    prev.rpg.lastSafeArea === 'island-80s'
+  ) {
+    return prev;
+  }
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: {
+      ...prev.rpg,
+      lastSafeArea: 'island-80s',
+      last80sPos: { x: rx, y: ry },
+    },
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function grantInventoryItems(
+  prev: PixelverseProgressState,
+  itemIds: string[]
+): PixelverseProgressState {
+  const nextItems = Array.from(new Set([...prev.rpg.inventoryItems, ...itemIds]));
+  if (nextItems.length === prev.rpg.inventoryItems.length) return prev;
+  const nextRpg = deriveCoherentRpgState(
+    {
+      ...prev.rpg,
+      inventoryItems: nextItems,
+    },
+    prev.games
+  );
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: nextRpg,
+    island70s: deriveCoherentIslandState(prev.island70s, prev.games, nextRpg),
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function openRpgChest(
+  prev: PixelverseProgressState,
+  chestId: string,
+  rewardItemIds: string[]
+): PixelverseProgressState {
+  if (prev.rpg.openedChestIds.includes(chestId)) return prev;
+  const nextRpg = deriveCoherentRpgState(
+    {
+      ...prev.rpg,
+      openedChestIds: [...prev.rpg.openedChestIds, chestId],
+      inventoryItems: Array.from(new Set([...prev.rpg.inventoryItems, ...rewardItemIds])),
+    },
+    prev.games
+  );
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: nextRpg,
+    island70s: deriveCoherentIslandState(prev.island70s, prev.games, nextRpg),
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function discoverRpgSecret(
+  prev: PixelverseProgressState,
+  secretId: string
+): PixelverseProgressState {
+  if (prev.rpg.discoveredSecretIds.includes(secretId)) return prev;
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: {
+      ...prev.rpg,
+      discoveredSecretIds: [...prev.rpg.discoveredSecretIds, secretId],
+    },
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function solveRpgPuzzle(
+  prev: PixelverseProgressState,
+  puzzleId: string,
+  rewardItemIds: string[] = []
+): PixelverseProgressState {
+  if (prev.rpg.solvedPuzzleIds.includes(puzzleId)) return prev;
+  const nextRpg = deriveCoherentRpgState(
+    {
+      ...prev.rpg,
+      solvedPuzzleIds: [...prev.rpg.solvedPuzzleIds, puzzleId],
+      inventoryItems: Array.from(new Set([...prev.rpg.inventoryItems, ...rewardItemIds])),
+    },
+    prev.games
+  );
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: nextRpg,
+    island70s: deriveCoherentIslandState(prev.island70s, prev.games, nextRpg),
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function repairRpgMechanism(
+  prev: PixelverseProgressState,
+  mechanismId: string,
+  alsoSwitches: string[] = []
+): PixelverseProgressState {
+  if (prev.rpg.repairedMechanismIds.includes(mechanismId)) return prev;
+  const nextRpg: RpgExplorationState = {
+    ...prev.rpg,
+    repairedMechanismIds: [...prev.rpg.repairedMechanismIds, mechanismId],
+  };
+  const nextSwitches = Array.from(
+    new Set([...prev.island70s.activatedIslandSwitches, ...alsoSwitches])
+  );
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: nextRpg,
+    island70s: deriveCoherentIslandState(
+      {
+        ...prev.island70s,
+        activatedIslandSwitches: nextSwitches,
+      },
+      prev.games,
+      nextRpg
+    ),
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function updateQuestStatus(
+  prev: PixelverseProgressState,
+  questId: string,
+  status: 'active' | 'completed',
+  rewardItemIds: string[] = []
+): PixelverseProgressState {
+  const existing = prev.rpg.questStates[questId];
+  if (existing === 'completed' && status === 'active') return prev;
+  if (existing === status && rewardItemIds.length === 0) return prev;
+
+  const nextRpg = deriveCoherentRpgState(
+    {
+      ...prev.rpg,
+      questStates: {
+        ...prev.rpg.questStates,
+        [questId]: status,
+      },
+      inventoryItems: Array.from(new Set([...prev.rpg.inventoryItems, ...rewardItemIds])),
+    },
+    prev.games
+  );
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: nextRpg,
+    island70s: deriveCoherentIslandState(prev.island70s, prev.games, nextRpg),
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function setEquippedCosmetic(
+  prev: PixelverseProgressState,
+  cosmeticId: string | null
+): PixelverseProgressState {
+  if (prev.rpg.equippedCosmetic === cosmeticId) return prev;
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: {
+      ...prev.rpg,
+      equippedCosmetic: cosmeticId,
+    },
+  };
+  saveProgressState(next);
+  return next;
+}
+
+export function togglePhosphorLanternState(
+  prev: PixelverseProgressState,
+  forceValue?: boolean
+): PixelverseProgressState {
+  const nextVal = forceValue !== undefined ? forceValue : !prev.rpg.lanternActive;
+  if (prev.rpg.lanternActive === nextVal) return prev;
+  const next: PixelverseProgressState = {
+    ...prev,
+    rpg: {
+      ...prev.rpg,
+      lanternActive: nextVal,
+    },
+  };
+  saveProgressState(next);
+  return next;
+}
+

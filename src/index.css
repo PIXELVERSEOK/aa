@@ -489,9 +489,135 @@ button:focus-visible {
     0 0 20px rgba(57, 255, 20, 0.42);
 }
 
+.gbc-retro-box {
+  background-color: #0c1427;
+  border: 4px solid #ffffff;
+  box-shadow: inset 0 0 0 2px #000000, 0 10px 30px rgba(0, 0, 0, 0.95);
+  font-family: 'JetBrains Mono', 'Courier New', Courier, monospace;
+}
+
+.gbc-green-filter {
+  filter: sepia(100%) hue-rotate(50deg) saturate(450%) contrast(150%) brightness(88%);
+}
+
+@keyframes screenShake {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  20% { transform: translate(-6px, 4px) rotate(-0.5deg); }
+  40% { transform: translate(6px, -4px) rotate(0.5deg); }
+  60% { transform: translate(-4px, -3px) rotate(-0.3deg); }
+  80% { transform: translate(4px, 3px) rotate(0.3deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+.screen-shake {
+  animation: screenShake 0.45s ease-in-out;
+}
+
+/* =========================================
+   TRANSICIÓN IRIS OUT / PIXEL WIPE (GAMEMANAGER)
+   Cierre escalonado retro (Iris Out) -> Cambio de vista oculto -> Apertura (Iris In)
+   ========================================= */
+.iris-wipe-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.iris-wipe-overlay.iris-wipe-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.iris-wipe-aperture {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 165vmax;
+  height: 165vmax;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow:
+    0 0 0 165vmax #02030a,
+    inset 0 0 0 5px #02030a,
+    inset 0 0 0 9px #00f3ff,
+    inset 0 0 0 13px #ffffff;
+  will-change: width, height;
+}
+
+.iris-wipe-overlay.iris-wipe-active .iris-wipe-aperture {
+  animation: irisPixelOutIn 0.56s forwards;
+}
+
+.iris-pixel-matrix {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  image-rendering: pixelated;
+  background-image:
+    linear-gradient(45deg, rgba(0, 243, 255, 0.14) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(0, 243, 255, 0.14) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(0, 243, 255, 0.14) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(0, 243, 255, 0.14) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  opacity: 0;
+}
+
+.iris-wipe-overlay.iris-wipe-active .iris-pixel-matrix {
+  animation: pixelMatrixPulse 0.56s steps(6, end) forwards;
+}
+
+@keyframes irisPixelOutIn {
+  0% {
+    width: 165vmax;
+    height: 165vmax;
+    animation-timing-function: steps(9, end);
+  }
+  42% {
+    width: 0px;
+    height: 0px;
+    animation-timing-function: linear;
+  }
+  58% {
+    width: 0px;
+    height: 0px;
+    animation-timing-function: steps(9, start);
+  }
+  100% {
+    width: 165vmax;
+    height: 165vmax;
+  }
+}
+
+@keyframes pixelMatrixPulse {
+  0% {
+    opacity: 0;
+  }
+  36% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  64% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hd2d-ambient-orbs,
-  .pixel-character-grid {
+  .pixel-character-grid,
+  .iris-wipe-overlay.iris-wipe-active .iris-wipe-aperture,
+  .iris-wipe-overlay.iris-wipe-active .iris-pixel-matrix {
     animation: none !important;
   }
 }
+

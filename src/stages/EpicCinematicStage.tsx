@@ -508,7 +508,11 @@ export function EpicCinematicStage({
       : currentScene.duration;
 
   // Hook de máquina de escribir 'useTypewriter' para sincronización perfecta carácter a carácter
-  const { displayedText, isComplete: lineFullyTyped } = useTypewriter({
+  const {
+    displayedText,
+    isComplete: lineFullyTyped,
+    completeImmediately,
+  } = useTypewriter({
     text: currentLine,
     durationSec: currentShotDuration,
     enabled: !awaitingAudioUnlock,
@@ -516,8 +520,10 @@ export function EpicCinematicStage({
   });
 
   const isSpeaking = cinematicNarrator.isSpeaking();
-  // El indicador de avance ▶ solo requiere completado visual del texto o finalización de locución o progreso > 75%
-  const showAdvanceIndicator = lineFullyTyped || !isSpeaking || sceneProgressPct >= 75;
+  const textTypingComplete = lineFullyTyped;
+  const voComplete = !isSpeaking;
+  // El triángulo indicador de avance ▶ aparece estrictamente cuando el tipeo finalizó Y la locución de voz terminó
+  const showAdvanceIndicator = textTypingComplete && voComplete;
 
   const finishSequence = useCallback(() => {
     if (timelineRef.current.finished) return;
@@ -535,6 +541,12 @@ export function EpicCinematicStage({
     }
     const ctrl = timelineRef.current;
     if (ctrl.finished) return;
+
+    // Si el texto aún no termina de tipearse, complétalo instantáneamente al primer clic/espacio
+    if (!lineFullyTyped) {
+      completeImmediately();
+      return;
+    }
 
     if (ctrl.sceneIdx === 1) {
       if (ctrl.shotElapsed < 0.25) return;
@@ -570,7 +582,13 @@ export function EpicCinematicStage({
         finishSequence();
       }
     }
-  }, [handleStartNarratedIntro, triggerBeatNarrationAndAudio, finishSequence]);
+  }, [
+    handleStartNarratedIntro,
+    triggerBeatNarrationAndAudio,
+    finishSequence,
+    lineFullyTyped,
+    completeImmediately,
+  ]);
 
   // Manejo de atajos de teclado: 'H' modo cine, Espacio/Enter avanzan escena
   useEffect(() => {

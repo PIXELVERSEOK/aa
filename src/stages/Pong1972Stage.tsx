@@ -13,10 +13,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { retroAudio } from '../audio/retroAudio';
 import { getHistoricalMemory } from '../memories/historicalCatalog';
 import { MemoryUnlockedModal } from '../memories/MemoryUnlockedModal';
+import { PONG_UNLOCK_SCORE } from '../memories/progressionState';
 
 export type PongCabinetPhase = 'intro' | 'flash' | 'playing' | 'lost';
 
-const PONG_WIN_SCORE = 3;
+const PONG_AI_MAX_GOALS = 3;
+const PONG_RALLY_POINTS = 100;
+const PONG_GOAL_POINTS = 350;
 
 export function Pong1972Stage({
   skipIntro = false,
@@ -43,6 +46,7 @@ export function Pong1972Stage({
     alreadyRestoredBefore
   );
   const [p1Score, setP1Score] = useState<number>(0);
+  const [p1Points, setP1Points] = useState<number>(0);
   const [p2Score, setP2Score] = useState<number>(0);
 
   const pongCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -62,6 +66,7 @@ export function Pong1972Stage({
   useEffect(() => {
     setPongPhase(skipIntro ? 'playing' : 'intro');
     setP1Score(0);
+    setP1Points(0);
     setP2Score(0);
     setPongStarflight(false);
     setPongCeremonyOpen(false);
@@ -161,6 +166,7 @@ export function Pong1972Stage({
     }));
 
     let score1 = 0;
+    let arcadePts = 0;
     let score2 = 0;
     let serveDelay = 0.55;
     let victoryCutscene = false;
@@ -169,6 +175,21 @@ export function Pong1972Stage({
     let anchorPaddleCy = H / 2;
     let cancelled = false;
     victoryFiredRef.current = false;
+    const scorePopups: { x: number; y: number; text: string; life: number }[] = [];
+
+    const triggerPongVictory = () => {
+      if (victoryFiredRef.current) return;
+      victoryFiredRef.current = true;
+      victoryCutscene = true;
+      cutsceneElapsed = 0;
+      ballTrail.length = 0;
+      anchorPaddleCy = Math.max(92, Math.min(H - 82, p1Y + PADDLE_H / 2));
+      setWasRestoredSnapshot(alreadyRestoredRef.current);
+      onVictoryRecordedRef.current(arcadePts);
+      ceremonyGateRef.current = 'waiting';
+      setPongCeremonyOpen(true);
+      retroAudio.portalVictory();
+    };
 
     const spawnPhosphorSparks = (sx: number, sy: number, count = 10) => {
       for (let i = 0; i < count; i++) {
@@ -253,9 +274,21 @@ export function Pong1972Stage({
             ballVy = offset * 280;
             retroAudio.pongPaddle();
             spawnPhosphorSparks(30, ballY + BALL_SIZE / 2);
+            arcadePts += PONG_RALLY_POINTS;
+            setP1Points(arcadePts);
+            scorePopups.push({
+              x: 64,
+              y: Math.max(48, ballY),
+              text: `+${PONG_RALLY_POINTS}`,
+              life: 0.75,
+            });
+            if (arcadePts >= PONG_UNLOCK_SCORE) {
+              triggerPongVictory();
+            }
           }
 
           if (
+            !victoryCutscene &&
             ballVx > 0 &&
             ballX + BALL_SIZE >= W - 30 &&
             ballX <= W - 20 &&
@@ -271,21 +304,20 @@ export function Pong1972Stage({
             spawnPhosphorSparks(W - 30, ballY + BALL_SIZE / 2);
           }
 
-          if (ballX > W) {
+          if (!victoryCutscene && ballX > W) {
             score1 += 1;
+            arcadePts += PONG_GOAL_POINTS;
             setP1Score(score1);
+            setP1Points(arcadePts);
             retroAudio.pongScore(true);
-            if (score1 >= PONG_WIN_SCORE && !victoryFiredRef.current) {
-              victoryFiredRef.current = true;
-              victoryCutscene = true;
-              cutsceneElapsed = 0;
-              ballTrail.length = 0;
-              anchorPaddleCy = Math.max(92, Math.min(H - 82, p1Y + PADDLE_H / 2));
-              setWasRestoredSnapshot(alreadyRestoredRef.current);
-              onVictoryRecordedRef.current(score1);
-              ceremonyGateRef.current = 'waiting';
-              setPongCeremonyOpen(true);
-              retroAudio.portalVictory();
+            scorePopups.push({
+              x: W - 110,
+              y: H * 0.45,
+              text: `+${PONG_GOAL_POINTS} GOL!`,
+              life: 0.9,
+            });
+            if (arcadePts >= PONG_UNLOCK_SCORE) {
+              triggerPongVictory();
             } else {
               resetBall(false);
             }
@@ -295,7 +327,7 @@ export function Pong1972Stage({
             score2 += 1;
             setP2Score(score2);
             retroAudio.pongScore(false);
-            if (score2 >= PONG_WIN_SCORE) {
+            if (score2 >= PONG_AI_MAX_GOALS) {
               cancelled = true;
               setPongPhase('lost');
               return;
@@ -517,15 +549,38 @@ export function Pong1972Stage({
         ctx.fillStyle = '#e0f2fe';
         ctx.fillRect(sp.x - 2, sp.y - 2, 4, 4);
       }
+      for (let pi = scorePopups.length - 1; pi >= 0; pi--) {
+        scorePopups[pi].y -= 24 * dt;
+        scorePopups[pi].life -= dt;
+        if (scorePopups[pi].life <= 0) {
+          scorePopups.splice(pi, 1);
+          continue;
+        }
+        ctx.font = '700 13px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.globalAlpha = Math.min(1, scorePopups[pi].life * 1.4);
+        ctx.fillStyle = '#fde047';
+        ctx.fillText(scorePopups[pi].text, scorePopups[pi].x, scorePopups[pi].y);
+      }
       ctx.globalAlpha = 1;
 
-      ctx.font = '700 42px "JetBrains Mono", monospace';
+      ctx.font = '700 38px "JetBrains Mono", monospace';
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffffff';
       ctx.shadowColor = '#00f3ff';
-      ctx.shadowBlur = 20;
-      ctx.fillText(String(score1), W / 2 - 90, 54);
-      ctx.fillText(String(score2), W / 2 + 90, 54);
+      ctx.shadowBlur = 18;
+      ctx.fillText(String(score1), W / 2 - 90, 50);
+      ctx.fillText(String(score2), W / 2 + 90, 50);
+
+      // Marcador CRT de objetivo de 1.000 puntos
+      ctx.shadowBlur = 0;
+      ctx.font = '700 12px "JetBrains Mono", monospace';
+      ctx.fillStyle = arcadePts >= PONG_UNLOCK_SCORE ? '#39ff14' : '#00f3ff';
+      ctx.fillText(
+        `SCORE ${String(arcadePts).padStart(4, '0')} / ${PONG_UNLOCK_SCORE}`,
+        W / 2,
+        24
+      );
       ctx.restore();
 
       rafId = requestAnimationFrame(loop);
@@ -571,10 +626,10 @@ export function Pong1972Stage({
             </div>
             <div className="text-right font-mono-tabular text-xs font-bold text-neutral-950">
               <span className="block">
-                JUGADOR {p1Score} — {p2Score} IA
+                PUNTOS {String(p1Points).padStart(4, '0')} / {PONG_UNLOCK_SCORE} · GOLES {p1Score}-{p2Score}
               </span>
               <span className="text-[10px] tracking-widest text-neutral-900/75">
-                VICTORIA A LOS 3 PUNTOS
+                META HISTÓRICA: {PONG_UNLOCK_SCORE} PUNTOS (+100 DEVOLUCIÓN · +350 GOL)
               </span>
             </div>
           </div>
@@ -598,23 +653,24 @@ export function Pong1972Stage({
 
             {pongStarflight && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 glass-hud rounded px-4 py-1.5 text-xs font-mono-tabular text-[#00f3ff] pointer-events-none whitespace-nowrap">
-                Paleta acoplada como tabla · Regresando a la Isla de los 70...
+                ¡1.000 PTS superados! Viajando sobre la barra de Pong hacia el sector Space Invaders...
               </div>
             )}
 
             {pongPhase === 'lost' && (
               <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center space-y-4">
                 <p className="font-mono-tabular text-lg sm:text-xl font-bold text-white">
-                  RONDA FINALIZADA ({p1Score} - {p2Score})
+                  RONDA FINALIZADA ({p1Points} / {PONG_UNLOCK_SCORE} PTS)
                 </p>
                 <p className="text-xs sm:text-sm text-slate-300 max-w-sm font-ui">
-                  Alcanza 3 puntos antes que la máquina usando W y S para restaurar la memoria de 1972 y activar la tabla Pong en la isla.
+                  Alcanza 1.000 puntos devolviendo pelotas (+100 pts) y anotando goles (+350 pts) para viajar sobre la barra de Pong hacia el sector de Space Invaders.
                 </p>
                 <button
                   type="button"
                   onClick={() => {
                     retroAudio.uiClick();
                     setP1Score(0);
+                    setP1Points(0);
                     setP2Score(0);
                     setMatchKey((k) => k + 1);
                     setPongPhase('playing');
@@ -629,7 +685,7 @@ export function Pong1972Stage({
 
           <div className="w-full flex flex-wrap items-center justify-between gap-3 pt-1 text-xs font-bold text-neutral-950">
             <span className="font-mono-tabular">
-              W / S · MOVER PALETA · META: 3 PUNTOS
+              W / S · MOVER PALETA · META: {PONG_UNLOCK_SCORE} PUNTOS
             </span>
             <div className="flex items-center gap-2">
               <button

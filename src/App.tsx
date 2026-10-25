@@ -9,6 +9,7 @@ import {
   KeyRound,
   Layers,
   RotateCcw,
+  Sparkles,
   Unlock,
   Volume2,
   VolumeX,
@@ -24,19 +25,26 @@ import { Pong1972Stage } from './stages/Pong1972Stage';
 import { Origin70sIsland, Island70sArrivalMode } from './island/Origin70sIsland';
 import {
   collectUniqueMemoryDiamond,
+  discoverRpgSecret,
   loadProgressState,
   markCeremonyCompleted,
   markGameStarted,
   markTransitionFinished,
+  openRpgChest,
   PixelverseProgressState,
   recordEchoDiscovered,
   recordGameVictory,
   recordIslandSwitchActivated,
   recordIslandZoneVisited,
   recordNpcTalked,
-  resetProgressState,
+  repairRpgMechanism,
+  saveLast80sCoordinates,
   saveLastIslandCoordinates,
   saveStageCheckpoint,
+  setEquippedCosmetic,
+  solveRpgPuzzle,
+  togglePhosphorLanternState,
+  updateQuestStatus,
 } from './memories/progressionState';
 
 type IslandArrivalMode = Island70sArrivalMode;
@@ -74,14 +82,14 @@ const UNLOCKABLE_LEVELS: {
   {
     id: 'state-archipelago',
     code: 'MAP-70',
-    title: 'La Gran Isla de los 70',
-    subtitle: 'Archipiélago Cero · 9 Zonas',
+    title: 'Archipiélago RPG · Islas 70s y 80s',
+    subtitle: '9 Zonas, Interiores, Cuevas e Isla Neón',
   },
   {
     id: 'state-pong',
     code: 'NIV-01',
     title: 'Pong (1972)',
-    subtitle: 'Santuario Clásico Atari · 3 Puntos',
+    subtitle: 'Santuario Clásico Atari · Meta 1000 PTS',
   },
   {
     id: 'state-platformer',
@@ -98,8 +106,8 @@ const UNLOCKABLE_LEVELS: {
   {
     id: 'state-dk-classic',
     code: 'ARC-81',
-    title: 'Archivo Clásico · Donkey Kong',
-    subtitle: 'Hito Vertical 1981 (Bonus)',
+    title: 'Isla Neón 1980s · Donkey Kong',
+    subtitle: 'Gabinete Vertical 1981 · Vigas Rojas',
   },
 ];
 
@@ -120,6 +128,11 @@ class GameManager {
     'state-dk-classic',
   ];
   private listener?: (state: ViewStateId) => void;
+  private swapTimer: number | null = null;
+  private endTimer: number | null = null;
+
+  private static readonly SWAP_DELAY_MS = 275;
+  private static readonly TOTAL_DURATION_MS = 565;
 
   constructor(listener?: (state: ViewStateId) => void) {
     this.listener = listener;
@@ -129,7 +142,7 @@ class GameManager {
     return this.currentState;
   }
 
-  public transitionTo(nextState: ViewStateId): void {
+  private applyState(nextState: ViewStateId): void {
     this.currentState = nextState;
 
     for (const id of this.allStates) {
@@ -145,6 +158,63 @@ class GameManager {
 
     if (this.listener) {
       this.listener(nextState);
+    }
+  }
+
+  public transitionTo(
+    nextState: ViewStateId,
+    options?: { immediate?: boolean }
+  ): void {
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (options?.immediate || prefersReducedMotion || typeof document === 'undefined') {
+      this.clearTimers();
+      const overlay =
+        typeof document !== 'undefined'
+          ? document.getElementById('iris-wipe-overlay')
+          : null;
+      overlay?.classList.remove('iris-wipe-active');
+      this.applyState(nextState);
+      return;
+    }
+
+    const overlay = document.getElementById('iris-wipe-overlay');
+    if (!overlay) {
+      this.applyState(nextState);
+      return;
+    }
+
+    this.clearTimers();
+
+    // Reiniciar animación CSS de Iris Out / Pixel Wipe de forma determinista
+    overlay.classList.remove('iris-wipe-active');
+    void overlay.offsetWidth;
+    overlay.classList.add('iris-wipe-active');
+
+    // Conmutar vista exactamente en el cierre total del iris (pantalla cubierta)
+    this.swapTimer = window.setTimeout(() => {
+      this.swapTimer = null;
+      this.applyState(nextState);
+    }, GameManager.SWAP_DELAY_MS);
+
+    // Liberar cortina al concluir la apertura escalonada (Iris In)
+    this.endTimer = window.setTimeout(() => {
+      this.endTimer = null;
+      overlay.classList.remove('iris-wipe-active');
+    }, GameManager.TOTAL_DURATION_MS);
+  }
+
+  public clearTimers(): void {
+    if (typeof window === 'undefined') return;
+    if (this.swapTimer !== null) {
+      window.clearTimeout(this.swapTimer);
+      this.swapTimer = null;
+    }
+    if (this.endTimer !== null) {
+      window.clearTimeout(this.endTimer);
+      this.endTimer = null;
     }
   }
 }
@@ -247,6 +317,7 @@ export default function App() {
   const [activeState, setActiveState] = useState<ViewStateId>('state-cinematic');
   const [cinematicRunKey, setCinematicRunKey] = useState<number>(1);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
+  const [isGbGreenMode, setIsGbGreenMode] = useState<boolean>(false);
 
   // Estado 3: Variables CSS de identidad del Arquitecto
   const [skinColor, setSkinColor] = useState<string>(SKIN_SWATCHES[0].hex);
@@ -269,6 +340,7 @@ export default function App() {
   const [masterUnlocked, setMasterUnlocked] = useState<boolean>(false);
   const [serialStatus, setSerialStatus] = useState<'idle' | 'error' | 'unlocked'>('idle');
   const [levelMenuOpen, setLevelMenuOpen] = useState<boolean>(false);
+  const [codeModalOpen, setCodeModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (document.readyState === 'complete') {
@@ -292,9 +364,10 @@ export default function App() {
       setActiveState(state);
     });
     managerRef.current = gm;
-    gm.transitionTo('state-cinematic');
+    gm.transitionTo('state-cinematic', { immediate: true });
 
     return () => {
+      gm.clearTimers();
       unsubscribeBgm();
     };
   }, [windowReady]);
@@ -341,6 +414,20 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  useEffect(() => {
+    const onShake = () => {
+      const crtEl = document.getElementById('crt-overlay');
+      if (crtEl) {
+        crtEl.classList.add('screen-shake');
+        window.setTimeout(() => {
+          crtEl.classList.remove('screen-shake');
+        }, 500);
+      }
+    };
+    window.addEventListener('pixelverse-shake', onShake);
+    return () => window.removeEventListener('pixelverse-shake', onShake);
+  }, []);
+
   const handleCinematicComplete = useCallback(() => {
     managerRef.current?.transitionTo('state-title');
   }, []);
@@ -373,6 +460,7 @@ export default function App() {
         setMasterUnlocked(true);
         setSerialStatus('unlocked');
         retroAudio.portalVictory();
+        window.dispatchEvent(new CustomEvent('pixelverse-shake'));
       } else {
         setSerialStatus('error');
         retroAudio.pongScore(false);
@@ -384,6 +472,7 @@ export default function App() {
   const handleJumpToLevel = useCallback((targetState: ViewStateId) => {
     retroAudio.uiClick();
     setLevelMenuOpen(false);
+    setCodeModalOpen(false);
 
     if (targetState === 'state-cinematic') {
       setCinematicRunKey((k) => k + 1);
@@ -405,7 +494,7 @@ export default function App() {
     activeState === 'state-title' || activeState === 'state-avatar';
 
   return (
-    <div id="game-container" className="relative w-screen h-screen overflow-hidden bg-[#020207]">
+    <div id="game-container" className={`relative w-screen h-screen overflow-hidden bg-[#020207] ${isGbGreenMode ? 'gbc-green-filter' : ''}`}>
       {showAmbientBackdrop && (
         <div
           className="absolute inset-0 hd2d-ambient-orbs pointer-events-none z-0"
@@ -420,13 +509,33 @@ export default function App() {
         aria-hidden="true"
       />
 
+      {/* Cortina de transición retro Iris Out + Pixel Wipe controlada por GameManager */}
+      <div
+        id="iris-wipe-overlay"
+        aria-hidden="true"
+        className="iris-wipe-overlay"
+      >
+        <div className="iris-wipe-aperture" />
+        <div className="iris-pixel-matrix" />
+      </div>
+
       <div
         id="crt-overlay"
         aria-hidden="true"
         className="fixed inset-0 pointer-events-none z-50 crt-scanlines-global opacity-75"
       />
 
-      {/* Controles globales esquina superior derecha: Selector Rápido + Audio */}
+      {/* Insignia de Logro Visual: Arquitecto Legendario (Se muestra al desbloquear con serial maestro) */}
+      {masterUnlocked && (
+        <div className="fixed top-4 left-4 z-40 flex items-center gap-2 px-3.5 py-1.5 rounded-md glass-panel border border-[#00f3ff] shadow-[0_0_24px_rgba(0,243,255,0.75)] animate-pulse">
+          <Sparkles className="w-4 h-4 text-amber-300 animate-spin" style={{ animationDuration: '4s' }} />
+          <span className="text-xs font-mono-tabular font-bold tracking-widest text-[#00f3ff] uppercase drop-shadow-[0_0_8px_rgba(0,243,255,0.9)]">
+            ★ ARQUITECTO LEGENDARIO ★
+          </span>
+        </div>
+      )}
+
+      {/* Controles globales esquina superior derecha: Selector Rápido + Audio + Filtro GB Verde */}
       <div className="fixed top-4 right-4 z-40 flex items-center gap-2">
         {masterUnlocked && activeState !== 'state-title' && (
           <button
@@ -441,6 +550,21 @@ export default function App() {
             <span>Elegir Nivel</span>
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => {
+            retroAudio.uiClick();
+            setIsGbGreenMode((prev) => !prev);
+          }}
+          title="Alternar filtro monocromo Game Boy Verde"
+          aria-label="Alternar filtro monocromo Game Boy Verde"
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-mono-tabular glass-panel rounded-md transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            isGbGreenMode ? 'text-emerald-300 border-emerald-400 bg-emerald-950/60' : 'text-slate-200 hover:text-[#00f3ff]'
+          }`}
+        >
+          <span>{isGbGreenMode ? 'GB Verde: ON' : 'GB Verde: OFF'}</span>
+        </button>
 
         <button
           type="button"
@@ -539,38 +663,17 @@ export default function App() {
       </section>
 
       {/* =========================================================
-          ESTADO 2: PANTALLA DE TÍTULO + SERIAL MAESTRO + PROGRESO
+          ESTADO 2: PANTALLA DE TÍTULO (ISLA MULTIVERSO + START, CONTINUAR, CÓDIGO)
          ========================================================= */}
       <section
         id="state-title"
-        className="view-state z-10 px-4 sm:px-6 py-6 text-center overflow-y-auto"
+        className="view-state z-10 w-full h-full relative overflow-hidden bg-cover bg-center"
+        style={{ backgroundImage: `url('/assets/aistudio/imagen_a38b0421.png')` }}
       >
-        <div className="glass-panel rounded-2xl px-6 py-8 sm:px-12 sm:py-11 max-w-3xl w-full flex flex-col items-center space-y-6 my-auto">
-          <span className="text-[11px] font-mono-tabular tracking-[0.32em] text-[#00f3ff]/90">
-            AVENTURA RETRO-FUTURISTA · ARCHIPIÉLAGO CERO
-          </span>
-          <h1 className="title-neon font-display text-4xl sm:text-6xl lg:text-7xl tracking-[0.18em]">
-            PIXELVERSE
-          </h1>
-          <p className="text-sm sm:text-base tracking-[0.28em] text-[#00f3ff]">
-            EL REINICIO DEL UNIVERSO
-          </p>
-
-          <div className="pt-2 flex flex-wrap items-center justify-center gap-3.5">
-            {hasSavedProgress && (
-              <button
-                type="button"
-                onClick={() => {
-                  retroAudio.uiClick();
-                  setIslandArrivalMode('standard');
-                  managerRef.current?.transitionTo('state-archipelago');
-                }}
-                className="btn-ui rounded-md px-8 py-4 text-sm sm:text-base font-bold tracking-[0.14em] whitespace-nowrap shrink-0"
-              >
-                Continuar en la Isla 70s
-              </button>
-            )}
-
+        {/* Botones apilados verticalmente y centrados exactamente sobre la ilustración */}
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center space-y-2">
+          <div className="flex flex-col items-center space-y-2 w-56 sm:w-64 max-w-full">
+            {/* START */}
             <button
               id="btn-start"
               type="button"
@@ -578,143 +681,142 @@ export default function App() {
                 retroAudio.uiClick();
                 managerRef.current?.transitionTo('state-avatar');
               }}
-              className={`${
-                hasSavedProgress
-                  ? 'px-6 py-4 text-xs sm:text-sm font-semibold text-cyan-100 hover:text-white glass-hud rounded-md transition-colors cursor-pointer'
-                  : 'btn-ui rounded-md px-10 py-4 text-sm sm:text-base font-bold tracking-[0.18em]'
-              } whitespace-nowrap shrink-0`}
+              className="w-full py-2.5 sm:py-3 bg-gradient-to-b from-amber-300 via-amber-400 to-amber-600 text-black border-2 border-amber-100 shadow-[0_4px_0_#92400e,0_0_20px_rgba(251,191,36,0.6)] font-display font-black tracking-widest text-xs sm:text-sm uppercase cursor-pointer hover:brightness-110 active:translate-y-1 active:shadow-none transition-all text-center"
             >
-              {hasSavedProgress ? 'Personalizar Avatar' : 'Iniciar Partida'}
+              START
             </button>
 
+            {/* CONTINUAR */}
             <button
+              id="btn-continue"
               type="button"
-              onClick={handleReplayCinematic}
-              className="px-6 py-4 text-xs sm:text-sm font-semibold text-slate-200 hover:text-white glass-hud rounded-md transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              onClick={() => {
+                retroAudio.uiClick();
+                setIslandArrivalMode('standard');
+                managerRef.current?.transitionTo('state-archipelago');
+              }}
+              className="w-full py-2.5 sm:py-3 bg-gradient-to-b from-cyan-300 via-cyan-400 to-cyan-600 text-black border-2 border-cyan-100 shadow-[0_4px_0_#155e75,0_0_20px_rgba(6,182,212,0.6)] font-display font-black tracking-widest text-xs sm:text-sm uppercase cursor-pointer hover:brightness-110 active:translate-y-1 active:shadow-none transition-all text-center"
             >
-              Repetir Cinemática
+              CONTINUAR
+            </button>
+
+            {/* CÓDIGO */}
+            <button
+              id="btn-code-modal"
+              type="button"
+              onClick={() => {
+                retroAudio.uiClick();
+                setCodeModalOpen(true);
+              }}
+              className="w-full py-2.5 sm:py-3 bg-gradient-to-b from-emerald-300 via-emerald-400 to-emerald-600 text-black border-2 border-emerald-100 shadow-[0_4px_0_#166534,0_0_20px_rgba(16,185,129,0.6)] font-display font-black tracking-widest text-xs sm:text-sm uppercase cursor-pointer hover:brightness-110 active:translate-y-1 active:shadow-none transition-all text-center"
+            >
+              CÓDIGO
             </button>
           </div>
 
-          {hasSavedProgress && (
-            <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-mono-tabular text-slate-300">
-              <span>Memorias 70s: {progressState.restoredCount}/3</span>
-              <span>·</span>
-              <span>
-                Diamantes: {progressState.island70s.collectedDiamondIds.length}/9
-              </span>
-              <span>·</span>
-              {!confirmResetOpen ? (
-                <button
-                  type="button"
-                  onClick={() => setConfirmResetOpen(true)}
-                  className="inline-flex items-center gap-1 text-slate-400 hover:text-rose-300 cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Reiniciar progreso</span>
-                </button>
-              ) : (
-                <span className="inline-flex items-center gap-2 text-rose-300">
-                  <span>¿Borrar guardado?</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      retroAudio.uiClick();
-                      setProgressState(resetProgressState());
-                      setConfirmResetOpen(false);
-                    }}
-                    className="underline hover:text-white cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    Sí, reiniciar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmResetOpen(false)}
-                    className="text-slate-400 hover:text-white cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    Cancelar
-                  </button>
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Terminal de Serial Maestro para desbloquear todos los niveles */}
-          <div className="w-full pt-4 border-t border-white/12 flex flex-col items-center space-y-3">
-            <form
-              onSubmit={handleValidateSerial}
-              className="w-full max-w-md flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
-            >
-              <div className="relative flex-1">
-                <KeyRound className="w-4 h-4 text-[#00f3ff]/80 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  id="serial-unlock-input"
-                  type="text"
-                  value={serialInput}
-                  onChange={(e) => {
-                    setSerialInput(e.target.value);
-                    if (serialStatus === 'error') setSerialStatus('idle');
-                  }}
-                  placeholder="Ingresa serial de desbloqueo..."
-                  autoComplete="off"
-                  spellCheck={false}
-                  aria-label="Código serial para desbloquear niveles"
-                  className="w-full pl-9 pr-3 py-2.5 rounded-md bg-[#040715]/85 border border-[#00f3ff]/35 text-xs sm:text-sm font-mono-tabular text-white placeholder:text-slate-400 focus:outline-none focus:border-[#00f3ff] focus:shadow-[0_0_14px_rgba(0,243,255,0.28)]"
-                />
-              </div>
-
-              <button
-                id="btn-validate-serial"
-                type="submit"
-                className="px-4 py-2.5 rounded-md border border-[#00f3ff]/55 bg-cyan-950/60 hover:bg-cyan-900/75 text-xs font-mono-tabular font-bold tracking-wider uppercase text-[#00f3ff] hover:text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
-              >
-                Validar Serial
-              </button>
-            </form>
-
-            {serialStatus === 'error' && (
-              <p className="text-xs font-mono-tabular text-rose-400">
-                Serial inválido · Verifica el código maestro e inténtalo de nuevo.
-              </p>
-            )}
-
-            {masterUnlocked && (
-              <div className="w-full pt-2 space-y-3 text-left">
-                <div className="flex items-center justify-center gap-2 text-xs font-mono-tabular text-emerald-300">
-                  <Unlock className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>SERIAL VERIFICADO · ELIGE A QUÉ NIVEL QUIERES IR</span>
-                </div>
-
-                <div
-                  id="unlocked-levels-grid"
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 w-full"
-                >
-                  {UNLOCKABLE_LEVELS.map((lvl) => (
-                    <button
-                      key={lvl.id}
-                      type="button"
-                      onClick={() => handleJumpToLevel(lvl.id)}
-                      className="group text-left px-3.5 py-2.5 rounded-md border border-[#00f3ff]/35 bg-[#040817]/85 hover:border-[#00f3ff] hover:bg-cyan-950/55 transition-all cursor-pointer flex items-center justify-between gap-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-mono-tabular tracking-wider text-[#00f3ff]">
-                          {lvl.code}
-                        </p>
-                        <p className="text-xs sm:text-sm font-bold text-white truncate">
-                          {lvl.title}
-                        </p>
-                        <p className="text-[11px] text-slate-300 truncate">
-                          {lvl.subtitle}
-                        </p>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-[#00f3ff] group-hover:translate-x-0.5 transition-transform shrink-0" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+          <div className="bg-black/85 border border-[#00f3ff]/40 px-4 py-1 shadow-[0_0_15px_rgba(0,243,255,0.3)]">
+            <span className="text-[10px] font-mono-tabular tracking-[0.22em] text-[#00f3ff] font-bold uppercase">
+              REINICIO DEL UNIVERSO ARCADE
+            </span>
           </div>
         </div>
+
+        {/* Modal de Ingreso de Código / Serial Maestro */}
+        {codeModalOpen && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/82 backdrop-blur-sm p-4">
+            <div className="glass-panel rounded-xl p-6 sm:p-8 max-w-md w-full space-y-5 border border-[#00f3ff]/60 shadow-[0_0_35px_rgba(0,243,255,0.4)]">
+              <div className="flex items-center justify-between border-b border-white/15 pb-3">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-[#00f3ff]" />
+                  <span className="text-xs font-mono-tabular tracking-wider text-[#00f3ff] uppercase font-bold">
+                    Terminal de Códigos · Desbloqueo Maestro
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCodeModalOpen(false)}
+                  aria-label="Cerrar modal de código"
+                  className="text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleValidateSerial} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-mono-tabular text-slate-300">
+                    Ingresa el Serial Maestro (zudoka26):
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 text-[#00f3ff]/80 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={serialInput}
+                      onChange={(e) => {
+                        setSerialInput(e.target.value);
+                        if (serialStatus === 'error') setSerialStatus('idle');
+                      }}
+                      placeholder="Ej. zudoka26"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-md bg-[#040715]/90 border border-[#00f3ff]/40 text-sm font-mono-tabular text-white placeholder:text-slate-500 focus:outline-none focus:border-[#00f3ff] focus:shadow-[0_0_15px_rgba(0,243,255,0.3)]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setCodeModalOpen(false)}
+                    className="px-4 py-2 rounded border border-white/20 bg-black/40 text-xs font-mono-tabular text-slate-300 hover:text-white cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded border border-[#00f3ff]/70 bg-cyan-950/80 hover:bg-cyan-900 text-xs font-mono-tabular font-bold tracking-wider text-[#00f3ff] hover:text-white cursor-pointer transition-colors"
+                  >
+                    Validar Código
+                  </button>
+                </div>
+              </form>
+
+              {serialStatus === 'error' && (
+                <p className="text-xs font-mono-tabular text-rose-400 text-center">
+                  Serial incorrecto · Código maestro no reconocido.
+                </p>
+              )}
+
+              {masterUnlocked && (
+                <div className="space-y-3 pt-3 border-t border-white/15">
+                  <div className="flex items-center justify-center gap-2 text-xs font-mono-tabular text-emerald-300 font-bold">
+                    <Unlock className="w-4 h-4 text-emerald-400" />
+                    <span>¡ACCESO CONCEDIDO! NIVELES DESBLOQUEADOS:</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {UNLOCKABLE_LEVELS.map((lvl) => (
+                      <button
+                        key={lvl.id}
+                        type="button"
+                        onClick={() => {
+                          setCodeModalOpen(false);
+                          handleJumpToLevel(lvl.id);
+                        }}
+                        className="text-left px-3 py-2 rounded border border-[#00f3ff]/40 bg-black/60 hover:bg-cyan-950/60 text-xs font-mono-tabular flex items-center justify-between cursor-pointer transition-colors"
+                      >
+                        <div>
+                          <span className="text-[#00f3ff] font-bold">{lvl.code} · </span>
+                          <span className="text-white font-bold">{lvl.title}</span>
+                        </div>
+                        <ChevronRight className="w-3.5 h-3.5 text-[#00f3ff]" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* =========================================================
@@ -858,6 +960,7 @@ export default function App() {
             alreadyRestoredBefore={Boolean(progressState.games['pong']?.memoryUnlocked)}
             onVictoryRecorded={(finalScore) => {
               setProgressState((prev) => recordGameVictory(prev, 'pong', finalScore));
+              window.dispatchEvent(new CustomEvent('pixelverse-shake'));
             }}
             onCeremonyCompleted={() => {
               setProgressState((prev) => markCeremonyCompleted(prev, 'pong'));
@@ -894,6 +997,9 @@ export default function App() {
             onEnterSpaceInvaders={() => {
               managerRef.current?.transitionTo('state-invaders');
             }}
+            onEnterDonkeyKong={() => {
+              managerRef.current?.transitionTo('state-dk-classic');
+            }}
             onCollectDiamond={(diamondId) => {
               setProgressState((prev) => collectUniqueMemoryDiamond(prev, diamondId));
             }}
@@ -911,6 +1017,34 @@ export default function App() {
             }}
             onSavePosition={(x, y) => {
               setProgressState((prev) => saveLastIslandCoordinates(prev, x, y));
+            }}
+            onSave80sPosition={(x, y) => {
+              setProgressState((prev) => saveLast80sCoordinates(prev, x, y));
+            }}
+            onOpenChest={(chestId, rewardItemIds) => {
+              setProgressState((prev) => openRpgChest(prev, chestId, rewardItemIds));
+            }}
+            onDiscoverSecret={(secretId) => {
+              setProgressState((prev) => discoverRpgSecret(prev, secretId));
+            }}
+            onSolvePuzzle={(puzzleId, rewardItemIds) => {
+              setProgressState((prev) => solveRpgPuzzle(prev, puzzleId, rewardItemIds));
+            }}
+            onRepairMechanism={(mechanismId, alsoSwitches) => {
+              setProgressState((prev) =>
+                repairRpgMechanism(prev, mechanismId, alsoSwitches)
+              );
+            }}
+            onUpdateQuest={(questId, status, rewardItemIds) => {
+              setProgressState((prev) =>
+                updateQuestStatus(prev, questId, status, rewardItemIds)
+              );
+            }}
+            onEquipCosmetic={(cosmeticId) => {
+              setProgressState((prev) => setEquippedCosmetic(prev, cosmeticId));
+            }}
+            onToggleLantern={(forceValue) => {
+              setProgressState((prev) => togglePhosphorLanternState(prev, forceValue));
             }}
             onArrivalSequenceFinished={() => {
               setIslandArrivalMode('standard');
@@ -980,6 +1114,7 @@ export default function App() {
               setProgressState((prev) =>
                 recordGameVictory(prev, 'space-invaders', finalScore, 3)
               );
+              window.dispatchEvent(new CustomEvent('pixelverse-shake'));
             }}
             onCeremonyCompleted={() => {
               setProgressState((prev) =>
@@ -1004,30 +1139,44 @@ export default function App() {
       </section>
 
       {/* =========================================================
-          ESTADO BONUS PRESERVADO: CLÁSICO DONKEY KONG (1981) — SELECTOR MAESTRO
+          ESTADO 8: GABINETE VERTICAL DE 1981 (ISLA NEÓN 1980s / SELECTOR MAESTRO)
          ========================================================= */}
       <section id="state-dk-classic" className="view-state z-10 px-4 py-4 arcade-hall-backdrop">
         {windowReady && activeState === 'state-dk-classic' && (
-          <HD2DDonkeyKongStage
-            skinColor={skinColor}
-            hairColor={hairColor}
-            shirtColor={shirtColor}
-            alreadyRestoredBefore={Boolean(
-              progressState.games['donkey-kong']?.ceremonyShown
-            )}
-            onVictoryRecorded={(diamonds) => {
-              setProgressState((prev) =>
-                recordGameVictory(prev, 'donkey-kong', diamonds * 100, diamonds)
-              );
-            }}
-            onComplete={() => {
-              setIslandArrivalMode('standard');
-              setProgressState((prev) =>
-                markTransitionFinished(prev, 'donkey-kong', false)
-              );
-              managerRef.current?.transitionTo('state-archipelago');
-            }}
-          />
+          <div className="relative w-full h-full flex flex-col items-center justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                retroAudio.uiClick();
+                setIslandArrivalMode('return-80s');
+                managerRef.current?.transitionTo('state-archipelago');
+              }}
+              className="fixed bottom-4 left-4 z-30 glass-panel px-3.5 py-1.5 rounded-md text-xs font-mono-tabular text-[#00f3ff] hover:text-white cursor-pointer"
+            >
+              ← Volver a Isla Neón 1980s
+            </button>
+            <HD2DDonkeyKongStage
+              skinColor={skinColor}
+              hairColor={hairColor}
+              shirtColor={shirtColor}
+              alreadyRestoredBefore={Boolean(
+                progressState.games['donkey-kong']?.ceremonyShown
+              )}
+              onVictoryRecorded={(diamonds) => {
+                setProgressState((prev) =>
+                  recordGameVictory(prev, 'donkey-kong', diamonds * 250, diamonds)
+                );
+                window.dispatchEvent(new CustomEvent('pixelverse-shake'));
+              }}
+              onComplete={() => {
+                setIslandArrivalMode('return-80s');
+                setProgressState((prev) =>
+                  markTransitionFinished(prev, 'donkey-kong', false)
+                );
+                managerRef.current?.transitionTo('state-archipelago');
+              }}
+            />
+          </div>
         )}
       </section>
 

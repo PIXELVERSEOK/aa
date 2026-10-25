@@ -8,6 +8,15 @@
 
 import { PixelverseProgressState } from '../memories/progressionState';
 import {
+  BROKEN_RELAY_MECHANISM,
+  FacingDirection,
+  HARBOR_80S_FERRY,
+  ISLAND_70S_BUILDINGS,
+  RPG_CHESTS,
+  RPG_EXAMINABLES,
+  WATERFALL_SECRET_ENTRANCE,
+} from '../rpg/rpgContent';
+import {
   DISTANT_DECADE_VISTAS,
   ISLAND_DIAMONDS,
   ISLAND_ECHOES,
@@ -116,6 +125,229 @@ export function isWorldBoxVisible(
   );
 }
 
+export function drawPixelAvatar4Dir(
+  ctx: CanvasRenderingContext2D,
+  ax: number,
+  ay: number,
+  facingDir: FacingDirection,
+  walking: boolean,
+  sprinting: boolean,
+  t: number,
+  skin: string,
+  hair: string,
+  shirt: string,
+  opts?: {
+    reducedMotion?: boolean;
+    equippedCosmetic?: string | null;
+    lanternActive?: boolean;
+    interactAnim?: number;
+  }
+): void {
+  const reducedMotion = Boolean(opts?.reducedMotion);
+  const animT = reducedMotion ? 0 : t;
+  const freq = sprinting ? 21 : 14;
+  const bob = walking
+    ? Math.abs(Math.sin(animT * freq)) * (sprinting ? 3.6 : 2.8)
+    : Math.sin(animT * 3.8) * 1.1;
+  const stride = walking && !reducedMotion ? Math.round(Math.sin(animT * freq) * 3) : 0;
+  const armSwing = walking && !reducedMotion ? Math.round(Math.cos(animT * freq) * 2.5) : 0;
+  const interactReach = (opts?.interactAnim ?? 0) > 0 ? 3 : 0;
+
+  ctx.save();
+  ctx.translate(Math.round(ax), Math.round(ay - bob));
+
+  // Sombra elíptica de contacto sobre el suelo
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
+  ctx.beginPath();
+  ctx.ellipse(0, 4 + bob, 11, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Halo de Lámpara de Fósforo si está activa
+  if (opts?.lanternActive) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const lGlow = ctx.createRadialGradient(0, -14, 4, 0, -14, 58);
+    lGlow.addColorStop(0, 'rgba(250, 204, 21, 0.44)');
+    lGlow.addColorStop(0.55, 'rgba(245, 158, 11, 0.16)');
+    lGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = lGlow;
+    ctx.beginPath();
+    ctx.arc(0, -14, 58, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Aura sutil reactiva al traje
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = sprinting ? 0.32 : 0.2;
+  ctx.fillStyle = shirt;
+  ctx.beginPath();
+  ctx.arc(0, -14, 17, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Botas / piernas animadas en 4 direcciones
+  ctx.fillStyle = '#1e293b';
+  if (facingDir === 'down' || facingDir === 'up') {
+    ctx.fillRect(-7, -5 + Math.max(0, stride), 6, 6 - Math.max(0, stride) * 0.4);
+    ctx.fillRect(1, -5 + Math.max(0, -stride), 6, 6 - Math.max(0, -stride) * 0.4);
+  } else {
+    ctx.fillRect(-5 + stride, -5, 6, 6);
+    ctx.fillRect(-1 - stride, -5, 6, 6);
+  }
+
+  // Torso pixel-art y cinturón dorado
+  ctx.fillStyle = shirt;
+  ctx.fillRect(-8, -16, 16, 11);
+  ctx.fillStyle = '#facc15';
+  ctx.fillRect(-8, -7, 16, 2);
+
+  // Detalle dorsal de mochila cuando mira hacia arriba
+  if (facingDir === 'up') {
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(-6, -15, 12, 8);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(-3, -13, 6, 3);
+  }
+
+  // Brazos animados según dirección
+  ctx.fillStyle = skin;
+  if (facingDir === 'down') {
+    ctx.fillRect(-11, -15 + armSwing, 3, 7 + interactReach);
+    ctx.fillRect(8, -15 - armSwing, 3, 7 + interactReach);
+  } else if (facingDir === 'up') {
+    ctx.fillRect(-11, -15 - armSwing, 3, 7);
+    ctx.fillRect(8, -15 + armSwing, 3, 7);
+  } else if (facingDir === 'right') {
+    ctx.fillRect(-2 + armSwing + interactReach, -14, 4, 7);
+  } else {
+    ctx.fillRect(-2 - armSwing - interactReach, -14, 4, 7);
+  }
+
+  // Cabeza y cabello con silueta diferenciada en 4 direcciones
+  if (facingDir === 'up') {
+    ctx.fillStyle = skin;
+    ctx.fillRect(-7, -26, 14, 10);
+    ctx.fillStyle = hair;
+    ctx.fillRect(-9, -32, 18, 13);
+    ctx.fillRect(-7, -19, 14, 3);
+  } else if (facingDir === 'down') {
+    ctx.fillStyle = skin;
+    ctx.fillRect(-7, -26, 14, 10);
+    ctx.fillStyle = hair;
+    ctx.fillRect(-9, -32, 18, 7);
+    ctx.fillRect(-9, -26, 2, 4);
+    ctx.fillRect(7, -26, 2, 4);
+    if (opts?.equippedCosmetic === 'item-visor-vectorial') {
+      ctx.fillStyle = '#00f3ff';
+      ctx.fillRect(-6, -23, 12, 4);
+      ctx.fillStyle = '#e0f2fe';
+      ctx.fillRect(-5, -23, 5, 1);
+    } else {
+      ctx.fillStyle = '#05070f';
+      ctx.fillRect(-5, -23, 3, 3);
+      ctx.fillRect(2, -23, 3, 3);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-5, -23, 1, 1);
+      ctx.fillRect(2, -23, 1, 1);
+    }
+  } else if (facingDir === 'right') {
+    ctx.fillStyle = skin;
+    ctx.fillRect(-6, -26, 13, 10);
+    ctx.fillStyle = hair;
+    ctx.fillRect(-8, -32, 16, 7);
+    ctx.fillRect(-8, -26, 5, 7);
+    if (opts?.equippedCosmetic === 'item-visor-vectorial') {
+      ctx.fillStyle = '#00f3ff';
+      ctx.fillRect(0, -23, 8, 4);
+    } else {
+      ctx.fillStyle = '#05070f';
+      ctx.fillRect(3, -23, 3, 3);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(4, -23, 1, 1);
+    }
+  } else {
+    ctx.fillStyle = skin;
+    ctx.fillRect(-7, -26, 13, 10);
+    ctx.fillStyle = hair;
+    ctx.fillRect(-8, -32, 16, 7);
+    ctx.fillRect(3, -26, 5, 7);
+    if (opts?.equippedCosmetic === 'item-visor-vectorial') {
+      ctx.fillStyle = '#00f3ff';
+      ctx.fillRect(-8, -23, 8, 4);
+    } else {
+      ctx.fillStyle = '#05070f';
+      ctx.fillRect(-6, -23, 3, 3);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-6, -23, 1, 1);
+    }
+  }
+
+  // Cosmético Corona Estelar del Descubridor
+  if (opts?.equippedCosmetic === 'item-manto-arquitecto') {
+    ctx.fillStyle = '#fde047';
+    ctx.fillRect(-6, -36, 12, 4);
+    ctx.fillRect(-6, -39, 2, 3);
+    ctx.fillRect(-1, -40, 2, 4);
+    ctx.fillRect(4, -39, 2, 3);
+    ctx.fillStyle = '#00f3ff';
+    ctx.fillRect(-1, -35, 2, 2);
+  }
+
+  ctx.restore();
+}
+
+export function drawRpgTreasureChest(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  opened: boolean,
+  accentHex: string,
+  elapsed: number,
+  reducedMotion: boolean
+): void {
+  ctx.save();
+  ctx.translate(Math.round(cx), Math.round(cy));
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.fillRect(-15, 6, 30, 6);
+
+  if (!opened) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const pulse = reducedMotion ? 0.25 : 0.2 + 0.14 * Math.sin(elapsed * 4 + cx);
+    ctx.fillStyle = accentHex;
+    ctx.globalAlpha = pulse;
+    ctx.beginPath();
+    ctx.arc(0, -4, 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Base de madera reforzada y herrajes pixelados
+  ctx.fillStyle = opened ? '#451a03' : '#78350f';
+  ctx.fillRect(-14, -12, 28, 20);
+  ctx.fillStyle = opened ? '#713f12' : '#b45309';
+  ctx.fillRect(-12, -10, 24, 16);
+
+  // Tapa del cofre
+  if (opened) {
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(-11, -10, 22, 6);
+    ctx.fillStyle = '#92400e';
+    ctx.fillRect(-14, -18, 28, 6);
+  } else {
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(-14, -13, 28, 3);
+    ctx.fillRect(-14, -4, 28, 2);
+    ctx.fillStyle = accentHex;
+    ctx.fillRect(-3, -6, 6, 6);
+  }
+
+  ctx.restore();
+}
+
 export function drawPixelAvatar(
   ctx: CanvasRenderingContext2D,
   ax: number,
@@ -128,47 +360,19 @@ export function drawPixelAvatar(
   shirt: string,
   reducedMotion = false
 ): void {
-  const animT = reducedMotion ? 0 : t;
-  const bob = walking ? Math.abs(Math.sin(animT * 15)) * 3 : Math.sin(animT * 4) * 1.4;
-  const stride = walking && !reducedMotion ? Math.round(Math.sin(animT * 15) * 2.5) : 0;
-
-  ctx.save();
-  ctx.translate(Math.round(ax), Math.round(ay - bob));
-
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-  ctx.beginPath();
-  ctx.ellipse(0, 4 + bob, 11, 4, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = 0.24;
-  ctx.fillStyle = shirt;
-  ctx.beginPath();
-  ctx.arc(0, -14, 18, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  ctx.fillStyle = hair;
-  ctx.fillRect(-9, -31, 18, 6);
-  ctx.fillStyle = skin;
-  ctx.fillRect(-7, -25, 14, 10);
-  ctx.fillStyle = '#05070f';
-  if (facing >= 0) {
-    ctx.fillRect(0, -22, 2, 3);
-    ctx.fillRect(4, -22, 2, 3);
-  } else {
-    ctx.fillRect(-6, -22, 2, 3);
-    ctx.fillRect(-2, -22, 2, 3);
-  }
-  ctx.fillStyle = shirt;
-  ctx.fillRect(-8, -15, 16, 11);
-  ctx.fillStyle = '#facc15';
-  ctx.fillRect(-8, -6, 16, 2);
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(-7 + stride, -4, 6, 6);
-  ctx.fillRect(1 - stride, -4, 6, 6);
-  ctx.restore();
+  drawPixelAvatar4Dir(
+    ctx,
+    ax,
+    ay,
+    facing >= 0 ? 'right' : 'left',
+    walking,
+    false,
+    t,
+    skin,
+    hair,
+    shirt,
+    { reducedMotion }
+  );
 }
 
 function drawPongHoverboard(
@@ -564,7 +768,15 @@ export interface IslandRenderFrameParams {
   ambientBits: IslandAmbientBit[];
   digitalCritters: IslandDigitalCritter[];
   pickupBursts: IslandPickupBurst[];
-  player: { x: number; y: number; facing: 1 | -1; walking: boolean };
+  player: {
+    x: number;
+    y: number;
+    facing: 1 | -1;
+    facingDir?: FacingDirection;
+    walking: boolean;
+    sprinting?: boolean;
+    interactAnim?: number;
+  };
   flight: {
     type: 'none' | 'pong-to-garganta' | 'garganta-to-pong' | 'shuttle-landing';
     elapsed: number;
@@ -582,6 +794,7 @@ export interface IslandRenderFrameParams {
   progressState: PixelverseProgressState;
   activeZoneId: IslandZoneId | null;
   prompt: IslandPromptRenderSpec | null;
+  scannerPulse?: { active: boolean; elapsed: number };
 }
 
 export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
@@ -610,6 +823,7 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     progressState,
     activeZoneId,
     prompt,
+    scannerPulse,
   } = params;
 
   ctx.imageSmoothingEnabled = false;
@@ -700,7 +914,9 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
       920,
       95,
       58,
-      'ISLA 1980s · EN NIEBLA',
+      invadersRestored || allUnlocked
+        ? 'ISLA 1980s · RUTA ACTIVA'
+        : 'ISLA 1980s · EN NIEBLA',
       '#f43f5e',
       '80s',
       elapsed,
@@ -1288,6 +1504,172 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     );
   }
 
+  // Edificios accesibles con arquitectura pixel-art nítida, tejados y puertas
+  for (const bldg of ISLAND_70S_BUILDINGS) {
+    if (
+      !isWorldBoxVisible(
+        bldg.x - 24,
+        bldg.y - 44,
+        bldg.w + 48,
+        bldg.h + 70,
+        camera.x,
+        camera.y,
+        vw,
+        vh
+      )
+    ) {
+      continue;
+    }
+    ctx.save();
+    // Sombra proyectada del edificio
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
+    ctx.fillRect(bldg.x - 6, bldg.y + bldg.h - 4, bldg.w + 12, 16);
+
+    // Muros de piedra/ladrillo pixelados
+    ctx.fillStyle = bldg.wallHex;
+    ctx.fillRect(bldg.x, bldg.y + 24, bldg.w, bldg.h - 24);
+    ctx.strokeStyle = bldg.trimHex;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bldg.x + 1, bldg.y + 24, bldg.w - 2, bldg.h - 25);
+
+    // Tejado escalonado estilo RPG clásico GBA
+    ctx.fillStyle = bldg.roofHex;
+    ctx.fillRect(bldg.x - 8, bldg.y + 8, bldg.w + 16, 22);
+    ctx.fillRect(bldg.x + 6, bldg.y - 4, bldg.w - 12, 14);
+    ctx.fillStyle = bldg.trimHex;
+    ctx.fillRect(bldg.x - 8, bldg.y + 28, bldg.w + 16, 3);
+
+    // Ventanas iluminadas cálidas
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(bldg.x + 18, bldg.y + 44, 22, 18);
+    ctx.fillRect(bldg.x + bldg.w - 40, bldg.y + 44, 22, 18);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(bldg.x + 28, bldg.y + 44, 2, 18);
+    ctx.fillRect(bldg.x + bldg.w - 30, bldg.y + 44, 2, 18);
+
+    // Puerta accesible central + felpudo de piedra
+    const dLeft = bldg.doorX - 15;
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(dLeft - 4, bldg.y + bldg.h, 38, 8);
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(dLeft, bldg.y + bldg.h - 34, 30, 34);
+    ctx.strokeStyle = bldg.trimHex;
+    ctx.strokeRect(dLeft, bldg.y + bldg.h - 34, 30, 34);
+
+    // Rótulo pixelado superior
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(bldg.doorX - 38, bldg.y + 12, 76, 13);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 8px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(bldg.signText, bldg.doorX, bldg.y + 21);
+    ctx.restore();
+  }
+
+  // Entrada oculta tras la cascada en La Garganta del Invasor
+  if (
+    isWorldBoxVisible(
+      WATERFALL_SECRET_ENTRANCE.x - 32,
+      WATERFALL_SECRET_ENTRANCE.y - 32,
+      64,
+      64,
+      camera.x,
+      camera.y,
+      vw,
+      vh
+    )
+  ) {
+    const discoveredWf =
+      progressState.rpg.discoveredSecretIds.includes('secret-cascada-gruta');
+    ctx.save();
+    ctx.translate(WATERFALL_SECRET_ENTRANCE.x, WATERFALL_SECRET_ENTRANCE.y);
+    ctx.fillStyle = discoveredWf ? 'rgba(8, 12, 28, 0.88)' : 'rgba(14, 165, 233, 0.24)';
+    ctx.fillRect(-16, -24, 32, 28);
+    ctx.strokeStyle = discoveredWf ? '#c084fc' : 'rgba(186, 230, 253, 0.55)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-16, -24, 32, 28);
+    ctx.restore();
+  }
+
+  // Navío Astral en El Puerto de las Islas Perdidas (Rumbo Isla Neón 1980s)
+  if (
+    isWorldBoxVisible(
+      HARBOR_80S_FERRY.x - 60,
+      HARBOR_80S_FERRY.y - 45,
+      120,
+      90,
+      camera.x,
+      camera.y,
+      vw,
+      vh
+    )
+  ) {
+    const ferryReady =
+      invadersRestored ||
+      allUnlocked ||
+      progressState.rpg.unlockedIslands.includes('island-80s');
+    const bobFerry = reducedMotion ? 0 : Math.sin(elapsed * 2.4) * 3;
+    ctx.save();
+    ctx.translate(HARBOR_80S_FERRY.x, Math.round(HARBOR_80S_FERRY.y + bobFerry));
+    ctx.fillStyle = ferryReady ? '#881337' : '#1e293b';
+    ctx.fillRect(-42, -12, 84, 24);
+    ctx.fillStyle = ferryReady ? '#f43f5e' : '#475569';
+    ctx.fillRect(-34, -22, 68, 12);
+    ctx.fillStyle = ferryReady ? '#00f3ff' : '#64748b';
+    ctx.fillRect(-26, -18, 52, 4);
+    ctx.font = '700 8px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.fillText(ferryReady ? 'NAVÍO 1980s' : 'MUELLE SELLADO', 0, 5);
+    ctx.restore();
+  }
+
+  // Relé Auxiliar averiado / reparado en las Ruinas Sur
+  if (
+    isWorldBoxVisible(
+      BROKEN_RELAY_MECHANISM.x - 24,
+      BROKEN_RELAY_MECHANISM.y - 28,
+      48,
+      48,
+      camera.x,
+      camera.y,
+      vw,
+      vh
+    )
+  ) {
+    const repaired = progressState.rpg.repairedMechanismIds.includes(
+      BROKEN_RELAY_MECHANISM.id
+    );
+    ctx.save();
+    ctx.translate(BROKEN_RELAY_MECHANISM.x, BROKEN_RELAY_MECHANISM.y);
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(-14, -22, 28, 28);
+    ctx.strokeStyle = repaired ? '#10b981' : '#f97316';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-14, -22, 28, 28);
+    ctx.fillStyle = repaired ? '#34d399' : Math.sin(elapsed * 10) > 0 ? '#fb923c' : '#7c2d12';
+    ctx.fillRect(-8, -16, 16, 10);
+    ctx.restore();
+  }
+
+  // Cofres del tesoro en el exterior de la Isla 70s
+  for (const chest of RPG_CHESTS) {
+    if (chest.areaId !== 'exterior-70s') continue;
+    if (!isWorldBoxVisible(chest.x - 24, chest.y - 24, 48, 48, camera.x, camera.y, vw, vh)) {
+      continue;
+    }
+    const opened = progressState.rpg.openedChestIds.includes(chest.id);
+    drawRpgTreasureChest(
+      ctx,
+      chest.x,
+      chest.y,
+      opened,
+      chest.accentHex,
+      elapsed,
+      reducedMotion
+    );
+  }
+
   // NPCs expresivos de la isla
   for (const npc of ISLAND_NPCS) {
     if (!isWorldBoxVisible(npc.x - 20, npc.y - 36, 40, 48, camera.x, camera.y, vw, vh)) continue;
@@ -1311,7 +1693,7 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     ctx.restore();
   }
 
-  // Jugador Pixel (o montado sobre la Tabla de Pong durante el vuelo interno)
+  // Jugador Pixel con animaciones en 4 direcciones (o montado sobre la Tabla de Pong)
   if (flight.type === 'pong-to-garganta' || flight.type === 'garganta-to-pong') {
     drawPongHoverboard(
       ctx,
@@ -1329,18 +1711,65 @@ export function renderIsland70sFrame(params: IslandRenderFrameParams): void {
     flight.type !== 'shuttle-landing' ||
     flight.elapsed / flight.duration >= 0.72
   ) {
-    drawPixelAvatar(
+    drawPixelAvatar4Dir(
       ctx,
       player.x,
       player.y,
-      player.facing,
+      player.facingDir ?? (player.facing >= 0 ? 'right' : 'left'),
       player.walking,
+      Boolean(player.sprinting),
       elapsed,
       skinColor,
       hairColor,
       shirtColor,
-      reducedMotion
+      {
+        reducedMotion,
+        equippedCosmetic: progressState.rpg.equippedCosmetic,
+        lanternActive: progressState.rpg.lanternActive,
+        interactAnim: player.interactAnim,
+      }
     );
+  }
+
+  // Onda de pulso del Escáner de Secretos TTL [R]
+  if (scannerPulse && scannerPulse.active) {
+    const pRatio = Math.min(1, scannerPulse.elapsed / 1.45);
+    const radius = 24 + pRatio * 480;
+    ctx.save();
+    ctx.strokeStyle = `rgba(0, 243, 255, ${(1 - pRatio) * 0.85})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y - 10, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Marcar cofres cerrados, entrada tras cascada y grabados cercanos dentro del radio
+    const secretTargets: { x: number; y: number; tag: string }[] = [
+      {
+        x: WATERFALL_SECRET_ENTRANCE.x,
+        y: WATERFALL_SECRET_ENTRANCE.y,
+        tag: '¡SECRETO TRAS CASCADA!',
+      },
+      ...RPG_CHESTS.filter(
+        (c) =>
+          c.areaId === 'exterior-70s' &&
+          !progressState.rpg.openedChestIds.includes(c.id)
+      ).map((c) => ({ x: c.x, y: c.y, tag: 'COFRE DETECTADO' })),
+      ...RPG_EXAMINABLES.filter((ex) => ex.areaId === 'exterior-70s').map((ex) => ({
+        x: ex.x,
+        y: ex.y,
+        tag: 'PISTA ANTIGUA',
+      })),
+    ];
+
+    ctx.font = '700 10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    for (const st of secretTargets) {
+      if (Math.hypot(st.x - player.x, st.y - player.y) <= radius + 30) {
+        ctx.fillStyle = '#00f3ff';
+        ctx.fillText(`◆ ${st.tag}`, st.x, st.y - 34);
+      }
+    }
+    ctx.restore();
   }
 
   // Indicador flotante sobre el elemento interactivo cercano
